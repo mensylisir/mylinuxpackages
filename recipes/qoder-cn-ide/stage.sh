@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+# Qoder agent / IDE — upstream rpm carries the app resources but relies on a
+# distro electron package. We ship a matching Electron (43 for agent, 42 for
+# IDE) from the mirror and launch through a resourcesPath-override preload.
+set -euo pipefail
+source "$MLP_ROOT/lib/stage-common.sh"
+
+recipe_stage() {
+  local is_ide=0 cn=0
+  [[ "$APP_ID" == *ide ]] && is_ide=1
+  [[ "$APP_ID" == *cn* ]] && cn=1
+
+  local appname libdir launcher
+  if (( is_ide )); then
+    if (( cn )); then appname="qoder-cn-ide"; else appname="qoder-ide"; fi
+  else
+    if (( cn )); then appname="qoder-cn"; else appname="qoder"; fi
+  fi
+  launcher="$appname"; libdir="$appname"
+
+  local rpm; rpm="$(fetched_remote)"
+  local unpack="$WORK/unpack"
+  clean_dir "$unpack"; mkdir -p "$unpack"
+  rpm_extract "$rpm" "$unpack"
+
+  # Locate the app dir: the directory holding resources.pak with a resources/
+  # subdir (mirrors the upstream _get_app_dir()).
+  local appdir
+  appdir="$(find "$unpack" -type f -name resources.pak -printf '%h\n' 2>/dev/null \
+    | while read -r d; do [[ -d "$d/resources" ]] && { echo "$d"; break; }; done)"
+  [[ -n "$appdir" ]] || die "cannot locate app dir (resources.pak + resources/) in rpm"
+  local resdir="$appdir/resources"
+
+  mkdir -p "$ROOT/usr/lib/$libdir" "$ROOT/usr/bin" "$ROOT/usr/share/applications"
+  copy_tree "$resdir" "$ROOT/usr/lib/$libdir/"
+
+  # Drop foreign-platform resources.
+  find "$ROOT/usr/lib/$libdir" -type d \( -name '*win32*' -o -name '*darwin*' -o -name '*arm64*' \) \
+    -prune -exec clean_dir {} + 2>/dev/null || true
+
+  # Ship our own Electron under /usr/lib/<app>-electron.
+  local elec_zip="electron-v${ELECTRON_VERSION}-linux-x64.zip"
+  local edir="$ROOT/usr/lib/${libdir}-electron"
+  mkdir -p "$edir"
+  unzip -q "$(fetched "$elec_zip")" -d "$edir"
+  # Electron's default_app.asar is not needed; keep LICENSE files.
+  rm -f "$edir/resources/default_app.asar"
+  local electron_bin="$edir/electron"
+
+  # Install resourcesPath override preload.
+  install -m644 "$MLP_ROOT/lib/patch/qoder-resources.cjs" \
+    "$ROOT/usr/lib/$libdir/$launcher.js"
+
+  # Determine the app entry (app.asar / app / app.asar.unpacked).
+  local runname
+  if [[ -f "$ROOT/usr/lib/$libdir/app.asar" ]]; then runname="app.asar"
+  elif [[ -d "$ROOT/usr/lib/$libdir/app" ]]; then runname="app"
+  else runname="app.asar.unpacked"; fi
+
+  # sharp's libvips is referenced via a relative path from /usr/lib/<app>/lib.
+  if [[ -e "$ROOT/usr/lib/$libdir/app.asar.unpacked/node_modules/@img/sharp-libvips-linux-x64/lib/libvips-cpp.so.8.17.3" ]]; then
+    mkdir -p "$ROOT/usr/lib/$libdir/lib"
+    ln -sf "../app.asar.unpacked/node_modules/@img/sharp-libvips-linux-x64/lib/libvips-cpp.so.8.17.3" \
+      "$ROOT/usr/lib/$libdir/lib/libvips-cpp.so.8.17.3"
+  fi
+
+  # Desktop entry + icons from the rpm.
+  find "$unpack" -path '*/share/applications/*' -type f \( -name '*.desktop' \) -print0 2>/dev/null \
+    | while IFS= read -r -d '' f; do
+        install -m644 "$f" "$ROOT/usr/share/applications/$(basename "$f")"
+        sed -i -e "s|/opt/${appname^}/||g" -e "s|/usr/share/$libdir/||g" \
+          "$ROOT/usr/share/applications/$(basename "$f")" 2>/dev/null || true
+      done
+  find "$unpack" -path '*/share/icons/*' -type f \( -name '*.png' -o -name '*.svg' \) -print0 2>/dev/null \
+    | while IFS= read -r -d '' f; do
+        rel="${f#*/share/icons/}"; install -Dm644 "$f" "$ROOT/usr/share/icons/$rel"
+      done
+
+  # Launcher: use bundled Electron with the override preload.
+  cat > "$ROOT/usr/bin/$launcher" <<EOF
+#!/bin/bash
+set -e
+export _APPDIR="/usr/lib/$libdir"
+export CHROME_DESKTOP="$launcher.desktop"
+export LD_LIBRARY_PATH="\${_APPDIR}/lib:\${LD_LIBRARY_PATH:-}"
+SANDBOX=()
+if [ "\${EUID}" -eq 0 ] && [ "\${ELECTRON_RUN_AS_NODE}" != 1 ]; then SANDBOX=(--no-sandbox); fi
+exec "$electron_bin" "\${SANDBOX[@]}" --require "\${_APPDIR}/$launcher.js" \
+  --app "\${_APPDIR}/$runname" "\$@"
+EOF
+  chmod 755 "$ROOT/usr/bin/$launcher"
+
+
+  # IDE build: install the bundled 512px icon into pixmaps and copy any
+  # appdata / mime / shell-completion resources shipped in the rpm.
+  install -Dm644 "$PKG_DIR/qoder-cn-ide-512.png" "$ROOT/usr/share/pixmaps/qoder-cn-ide.png"
+  find "$unpack" -path '*/share/appdata/*' -type f -print0 2>/dev/null \
+    | while IFS= read -r -d '' f; do install -Dm644 "$f" "$ROOT/usr/share/appdata/$(basename "$f")"; done
+  find "$unpack" -path '*/share/mime/packages/*' -type f -print0 2>/dev/null \
+    | while IFS= read -r -d '' f; do install -Dm644 "$f" "$ROOT/usr/share/mime/packages/$(basename "$f")"; done
+  find "$unpack" -path '*/bash-completion/*' -type f -print0 2>/dev/null \
+    | while IFS= read -r -d '' f; do install -Dm644 "$f" "$ROOT/usr/share/bash-completion/completions/$launcher"; done
+  find "$unpack" -path '*/zsh/site-functions/*' -type f -print0 2>/dev/null \
+    | while IFS= read -r -d '' f; do install -Dm644 "$f" "$ROOT/usr/share/zsh/site-functions/_$launcher"; done
+
+  # License from rpm.
+  if [[ -f "$unpack/usr/share/licenses/LICENSE.html" ]]; then
+    install -Dm644 "$unpack/usr/share/licenses/LICENSE.html" \
+      "$ROOT/usr/share/licenses/$PKG_NAME/LICENSE.html"
+  fi
+  write_postinst
+}

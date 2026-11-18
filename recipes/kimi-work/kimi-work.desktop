@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Kimi Work
+Comment=Kimi Work desktop client
+Exec=kimi-work %U
+Icon=kimi-work
+Terminal=false
+Type=Application
+Categories=Office;Network;
+StartupNotify=true
+StartupWMClass=kimi-desktop

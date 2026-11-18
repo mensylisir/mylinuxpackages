@@ -1,0 +1,28 @@
+DISCLAIMER
+
+This package is an UNOFFICIAL community Linux port of the WorkBuddy
+international-edition client (https://www.workbuddy.ai), which upstream does
+not publish for Linux. It combines the official Windows application payload
+with the Electron runtime and Linux helper binaries from Tencent's official
+domestic-edition Linux package.
+
+- WorkBuddy, WorkBuddy AI and CodeBuddy are products/trademarks of Tencent.
+  This project is not affiliated with, endorsed by, or supported by Tencent.
+- All application content is downloaded from Tencent's official servers at
+  build time and is NOT redistributed by this package. The upstream software
+  is proprietary; use of it is governed by Tencent's own Terms of Service and
+  Privacy Policy.
+- The Electron runtime, the bundled node/python session runtimes and the
+  Linux CLI helpers come from Tencent's official domestic-edition
+  (workbuddy.cn) Linux package. That Electron build carries the proprietary
+  "workbuddyStorage" binding that sign-in depends on; stock Electron fails
+  with CREDENTIAL_BOOTSTRAP_FAILED.
+- Auto-update is non-functional on Linux (upstream publishes no Linux feed
+  for the international edition). Upgrade by rebuilding this package.
+- Known functional degradations versus the official macOS/Windows clients:
+  Tencent Docs deep-collaboration engine (upstream publishes no Linux SDK for
+  the current version; basic document read/write via cloud API still works),
+  WeChat Pay plugin (no Linux build), and the enterprise IM channel backend
+  (upstream's headless backend is used instead, as on the overseas build).
+- Do NOT report issues with this port to Tencent's official support
+  channels. File issues with the community port project instead.

@@ -8,9 +8,34 @@ on:
         required: true
         type: choice
         options:
+          - all
+          - appclone
+          - catpaw
+          - catpaw-cn
+          - dumate-app
+          - gw2api
+          - kimi-code-cn
+          - kimi-code-intl
+          - kimi-work
+          - kimi-work-cn
+          - kimi-work-intl
+          - mimo-desktop
+          - mimo-desktop-intl
+          - minimax-code-cli
           - minimax-code-cn
           - minimax-code-intl
-          - all
+          - qoder-agent
+          - qoder-cn-agent
+          - qoder-cn-ide
+          - qoder-ide
+          - qoderwake
+          - qoderwake-cn
+          - trae-cn-ide
+          - trae-ide
+          - workbuddy
+          - workbuddy-intl
+          - zcode-cn
+          - zcode-intl
         default: all
       target:
         description: 'Package format'
@@ -49,7 +74,9 @@ jobs:
         run: |
           RECIPE="${{ inputs.recipe }}"
           if [ -z "$RECIPE" ] || [ "$RECIPE" = "all" ]; then
-            JSON=$(find recipes -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | jq -R -s 'split("\n") | map(select(length>0))')
+            JSON=$(find recipes -mindepth 1 -maxdepth 1 -type d -printf '%f\n' \
+              | sort \
+              | jq -R -s 'split("\n") | map(select(length>0))')
           else
             JSON=$(printf '%s' "$RECIPE" | jq -R -s 'split("\n") | map(select(length>0))')
           fi
@@ -68,9 +95,9 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y p7zip-full unzip rpm file xz-utils node-gyp \
+          sudo apt-get install -y p7zip-full unzip rpm file xz-utils \
             build-essential python3 curl
-          npm install -g node-gyp
+          npm install -g @electron/asar node-gyp
 
       - name: Build recipe ${{ matrix.recipe }}
         shell: bash

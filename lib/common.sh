@@ -5,7 +5,8 @@ set -euo pipefail
 MLP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="${WORK:-$MLP_ROOT/.build}"
 
-say() { printf '\n==> %s\n' "$*"; }
+# Progress goes to stderr so build.sh's stdout can carry only the root path.
+say() { printf '\n==> %s\n' "$*" >&2; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 # Ensure a recipe variable is set.

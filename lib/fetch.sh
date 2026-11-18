@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
-# Generic download helper with SHA256 verification and a shared cache.
-# Sourced by build.sh. Requires: curl, sha256sum.
+# Generic download helper with checksum verification and a shared cache.
+# Sourced by build.sh. Requires: curl, sha256sum (b2sum optional).
 #
-# Recipe contract (sourced as shell):
-#   SOURCES=( "filename|url|sha256" ... )   -- sha256 may be SKIP
-#   CACHE_DIR                               -- optional, defaults to $WORK/http-cache
-
-# Download one file into the cache, verify checksum, expose its path via
-# global SOURCE_PATH. A matching cached file is reused without re-downloading.
+# SOURCES entry format:  "filename|url|checksum"
+#   url       https://...  -> downloaded with curl
+#             local:NAME   -> copied from the recipe dir (PKG_DIR/NAME)
+#   checksum  <64 hex>     -> sha256 (default)
+#             b2:<128 hex> -> blake2b-512 (used by some upstreams, e.g. Trae)
+#             SKIP         -> no verification (discouraged; local tests only)
+#
+# CACHE_DIR defaults to $WORK/http-cache. Fetched paths land in FETCHED[name].
 mlp_fetch() {
   local name="$1" url="$2" sum="$3"
   local cachedir="${CACHE_DIR:-$WORK/http-cache}"
   mkdir -p "$cachedir"
   local dest="$cachedir/$name"
 
-  # MLP_SKIP_SHA256=1 is for local testing with substitute artifacts only.
-  # CI and normal builds must always verify; never set it in production.
   if [[ -f "$dest" ]]; then
-    if [[ "$sum" == "SKIP" || "${MLP_SKIP_SHA256:-0}" == "1" ]] || _mlp_verify "$dest" "$sum"; then
-      echo "  [cache] $name"
+    if _mlp_accept "$dest" "$sum"; then
+      echo "  [cache] $name" >&2
       SOURCE_PATH="$dest"
       return 0
     fi
@@ -26,29 +26,37 @@ mlp_fetch() {
     rm -f "$dest"
   fi
 
-  echo "  [fetch] $name"
-  curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
-    -o "$dest" "$url" || {
-      echo "download failed: $url" >&2
-      return 1
-    }
+  if [[ "$url" == local:* ]]; then
+    local src="${url#local:}"
+    [[ -f "${PKG_DIR:-.}/$src" ]] || { echo "local source missing: $src" >&2; return 1; }
+    cp "${PKG_DIR:-.}/$src" "$dest"
+  else
+    echo "  [fetch] $name" >&2
+    curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 \
+      -o "$dest" "$url" || { echo "download failed: $url" >&2; return 1; }
+  fi
 
-  if [[ "$sum" != "SKIP" ]] && ! _mlp_verify "$dest" "$sum"; then
+  if ! _mlp_accept "$dest" "$sum"; then
     echo "checksum mismatch: $name (expected $sum)" >&2
     return 1
   fi
   SOURCE_PATH="$dest"
 }
 
-_mlp_verify() {
+_mlp_accept() {
   local file="$1" expected="$2"
+  [[ "$expected" == "SKIP" || "${MLP_SKIP_SHA256:-0}" == "1" ]] && return 0
   local actual
-  actual="$(sha256sum "$file" | awk '{print $1}')"
-  [[ "$actual" == "$expected" ]]
+  if [[ "$expected" == b2:* ]]; then
+    need b2sum "coreutils"
+    actual="$(b2sum "$file" | awk '{print $1}')"
+    [[ "$actual" == "${expected#b2:}" ]]
+  else
+    actual="$(sha256sum "$file" | awk '{print $1}')"
+    [[ "$actual" == "$expected" ]]
+  fi
 }
 
-# Fetch every SOURCES entry into an associative array keyed by filename.
-# Usage: mlp_fetch_all ; then reference "${FETCHED[filename]}"
 declare -gA FETCHED
 mlp_fetch_all() {
   local entry name url sum
