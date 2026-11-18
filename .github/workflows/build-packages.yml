@@ -113,14 +113,42 @@ jobs:
         env:
           RECIPE_INPUT: ${{ inputs.recipe }}
           ONLY: ${{ steps.set-tag.outputs.only }}
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
         run: |
-          # Priority: explicit tag suffix (debug subset) > dispatch input > all.
+          # Which recipes to build:
+          #   1. explicit "--recipe" tag suffix or a dispatch choice wins;
+          #   2. a release tag (push of v*) builds everything;
+          #   3. a normal branch push builds only the recipes it touched, and
+          #      everything when shared code (lib/, workflow, root script) moved.
           if [ -n "${ONLY}" ]; then
             RECIPE=$(printf '%s' "${ONLY}" | tr ',' '\n')
-          else
+          elif [ -n "${RECIPE_INPUT}" ] && [ "${RECIPE_INPUT}" != "all" ]; then
             RECIPE="${RECIPE_INPUT}"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            RECIPE=""
+          else
+            BASE="${BEFORE}"
+            if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] \
+               || ! git rev-parse --verify -q "${BASE}^{commit}" >/dev/null; then
+              BASE="$(git rev-parse --verify -q HEAD^ || true)"
+            fi
+            if [ -z "$BASE" ]; then
+              RECIPE=""
+            else
+              CHANGED="$(git diff --name-only "$BASE" "$SHA")"
+              SHARED="$(printf '%s\n' "$CHANGED" | grep -vE '^recipes/[^/]+/' | grep -v '^$' || true)"
+              if [ -n "$SHARED" ]; then
+                echo "shared files changed, building all:"; printf '%s\n' "$SHARED"
+                RECIPE=""
+              else
+                RECIPE="$(printf '%s\n' "$CHANGED" \
+                  | sed -n 's|^recipes/\([^/]*\)/.*|\1|p' | sort -u)"
+              fi
+            fi
           fi
-          if [ -z "$RECIPE" ] || [ "$RECIPE" = "all" ]; then
+          if [ -z "$RECIPE" ]; then
             JSON=$(find recipes -mindepth 1 -maxdepth 1 -type d -printf '%f\n' \
               | sort \
               | jq -R -s -c 'split("\n") | map(select(length>0))')
@@ -128,6 +156,7 @@ jobs:
             JSON=$(printf '%s' "$RECIPE" | jq -R -s -c 'split("\n") | map(select(length>0))')
           fi
           echo "matrix={\"recipe\":$JSON}" >> "$GITHUB_OUTPUT"
+          echo "recipes: $(printf '%s' "$JSON" | jq -c .)"
 
   build:
     needs: prepare

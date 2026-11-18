@@ -20,7 +20,8 @@ recipe_stage() {
   clean_dir "$unpack"; mkdir -p "$unpack"
   tar_extract "$tgz" "$unpack"   # tarball is flat (no top-level dir)
 
-  install -dm755 "$ROOT/usr/lib/$libdir/qodercli" "$ROOT/usr/bin"
+  install -dm755 "$ROOT/usr/lib/$libdir/qodercli" "$ROOT/usr/bin" \
+    "$ROOT/usr/share/applications"
   install -m755 "$unpack/$name" "$ROOT/usr/lib/$libdir/$name"
   install -m755 "$unpack/qodercli/qodercli-wake" \
     "$ROOT/usr/lib/$libdir/qodercli/qodercli-wake" 2>/dev/null || \

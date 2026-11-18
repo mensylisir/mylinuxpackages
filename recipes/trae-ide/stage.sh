@@ -23,7 +23,8 @@ recipe_stage() {
     srcdir="$(find "$unpack" -mindepth 1 -maxdepth 1 -type d | head -1)"
   fi
 
-  mkdir -p "$ROOT/opt/$appdir" "$ROOT/usr/bin"
+  mkdir -p "$ROOT/opt/$appdir" "$ROOT/usr/bin" "$ROOT/usr/share/applications" \
+           "$ROOT/usr/share/licenses/$PKG_NAME"
   copy_tree "$srcdir" "$ROOT/opt/$appdir"
   chmod 4755 "$ROOT/opt/$appdir/chrome-sandbox" 2>/dev/null || true
 
