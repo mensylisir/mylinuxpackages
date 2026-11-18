@@ -46,7 +46,8 @@ FILELIST="$BUILDROOT/SPECS/files.list"
   find . -mindepth 1 -print0 | sed -z 's|^\./|/|' | sort -z
 ) | while IFS= read -r -d '' p; do
   # Escape spaces and other spec-significant characters for rpm %files.
-  esc="${p//\\/\\\\}"; esc="${esc// /\\ }"; esc="${esc//\(/\\(}"; esc="${esc//\)/\\)}"
+  esc="${p//\\/\\\\}"; esc="${esc//%/%%}"; esc="${esc// /\\ }"
+  esc="${esc//\(/\\(}"; esc="${esc//\)/\\)}"
   printf '%s\n' "$esc" >> "$FILELIST"
 done
 
@@ -69,7 +70,9 @@ SPEC="$BUILDROOT/SPECS/$PKG_NAME.spec"
   echo "Non-official Linux repack built by mylinuxpackages."
   echo "%install"
   echo "cp -a %{_sourcedir}/payload/. %{buildroot}/"
-  echo "%files -f files.list"
+  # %files -f resolves relative paths against %_builddir, not %_specdir,
+  # so hand it the absolute path of the generated list.
+  echo "%files -f $FILELIST"
   echo "%defattr(-,root,root,-)"
   # Directory ownership is covered by -f; no explicit dirs needed.
   if [[ -n "$post" ]]; then
@@ -92,6 +95,7 @@ rpmbuild --define "_topdir $BUILDROOT" \
 }
 
 mkdir -p "$(dirname "$OUT")"
-cp "$BUILDROOT/RPMS/noarch/"*.rpm "$OUT" 2>/dev/null || \
-cp "$BUILDROOT/RPMS/x86_64/"*.rpm "$OUT"
+built="$(find "$BUILDROOT/RPMS" -type f -name '*.rpm' -print -quit)"
+[[ -n "$built" ]] || die "rpmbuild produced no rpm"
+cp "$built" "$OUT"
 echo "built: $OUT"

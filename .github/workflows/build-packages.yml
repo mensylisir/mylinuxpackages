@@ -152,29 +152,7 @@ jobs:
           TARGET_INPUT: ${{ inputs.target }}
         run: |
           TARGET="${TARGET_INPUT:-all}"
-          set -o pipefail
-          ./build-package.sh "recipes/${{ matrix.recipe }}/recipe.conf" --"$TARGET" \
-            2>&1 | tee "/tmp/build-${{ matrix.recipe }}.log"
-
-      - name: Publish failure log
-        if: failure()
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.prepare.outputs.tag }}
-        run: |
-          # Logs are not readable anonymously, so surface the tail of the failed
-          # build as a public release asset.
-          LOG="/tmp/build-${{ matrix.recipe }}.log"
-          OUT="fail-${{ matrix.recipe }}.txt"
-          {
-            echo "recipe: ${{ matrix.recipe }}"
-            echo "target: ${TARGET_INPUT:-all}"
-            echo "runner: $(uname -a)"
-            echo "--- last 200 lines ---"
-            tail -n 200 "$LOG" 2>/dev/null || echo "(no log captured)"
-          } > "$OUT"
-          gh release upload "$TAG" "$OUT" --clobber || true
+          ./build-package.sh "recipes/${{ matrix.recipe }}/recipe.conf" --"$TARGET"
 
       - name: Upload to release
         uses: softprops/action-gh-release@v2
