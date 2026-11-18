@@ -66,8 +66,40 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      tag: ${{ steps.set-tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: set-tag
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          # One release per run: every recipe uploads into the same tag, so
+          # parallel jobs never race to create different releases.
+          if [ -n "${INPUT_TAG}" ]; then
+            TAG="${INPUT_TAG}"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="v$(date -u +%Y%m%d)-${GITHUB_RUN_NUMBER}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure release exists
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.set-tag.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG already exists"
+          else
+            gh release create "$TAG" --title "$TAG" \
+              --notes "Automated build run ${GITHUB_RUN_NUMBER} from ${GITHUB_SHA::7}"
+          fi
+
       - name: Resolve recipe matrix
         id: set-matrix
         shell: bash
@@ -101,30 +133,17 @@ jobs:
 
       - name: Build recipe ${{ matrix.recipe }}
         shell: bash
+        env:
+          TARGET_INPUT: ${{ inputs.target }}
         run: |
-          TARGET="${{ inputs.target }}"
-          [ -z "$TARGET" ] && TARGET=all
+          TARGET="${TARGET_INPUT:-all}"
           ./build-package.sh "recipes/${{ matrix.recipe }}/recipe.conf" --"$TARGET"
-
-      - name: Determine release tag
-        id: tag
-        shell: bash
-        run: |
-          if [ -n "${{ inputs.tag }}" ]; then
-            TAG="${{ inputs.tag }}"
-          elif [ "${{ github.ref_type }}" = "tag" ]; then
-            TAG="${GITHUB_REF_NAME}"
-          else
-            VER=$(grep -E '^VERSION=' "recipes/${{ matrix.recipe }}/recipe.conf" | head -1 | cut -d'"' -f2)
-            TAG="v${VER}"
-          fi
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          generate_release_notes: true
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          generate_release_notes: false
           files: |
             out/*.deb
             out/*.rpm
