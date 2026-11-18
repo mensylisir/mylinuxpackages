@@ -98,6 +98,15 @@ def check_recipes() -> None:
         if pkg and not re.fullmatch(r"[a-z0-9][a-z0-9+.-]*", pkg):
             err(f"{rid}: illegal package name {pkg!r}")
 
+        # Conflict/replacement declarations must be legal package names and
+        # must never target this package itself.
+        for arr in ("CONFLICTS_DEB", "REPLACES_DEB", "CONFLICTS_RPM", "OBSOLETES_RPM"):
+            for item in array_items(text, arr):
+                if not re.fullmatch(r"[a-z0-9][a-z0-9+.-]*", item):
+                    err(f"{rid}: illegal name in {arr}: {item!r}")
+                if item == pkg:
+                    err(f"{rid}: {arr} conflicts with its own package name {pkg}")
+
         # stage script must exist for STAGE_MODE=recipe
         mode = re.search(r'^STAGE_MODE="([^"]*)"', text, re.M)
         has_stage = os.path.exists(os.path.join(os.path.dirname(conf), "stage.sh"))

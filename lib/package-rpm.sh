@@ -64,6 +64,14 @@ SPEC="$BUILDROOT/SPECS/$PKG_NAME.spec"
     printf 'Requires:       %s\n' "${DEPENDS_RPM[0]}"
     for d in "${DEPENDS_RPM[@]:1}"; do printf 'Requires:       %s\n' "$d"; done
   fi
+  # Same rationale as CONFLICTS_DEB/REPLACES_DEB in package-deb.sh: vendor
+  # packages owning the same paths must be replaced, not co-installed.
+  if [[ -n "${CONFLICTS_RPM:-}" ]] && (( ${#CONFLICTS_RPM[@]} )); then
+    for d in "${CONFLICTS_RPM[@]}"; do printf 'Conflicts:      %s\n' "$d"; done
+  fi
+  if [[ -n "${OBSOLETES_RPM:-}" ]] && (( ${#OBSOLETES_RPM[@]} )); then
+    for d in "${OBSOLETES_RPM[@]}"; do printf 'Obsoletes:      %s\n' "$d"; done
+  fi
   echo "AutoReqProv:    no"
   echo "%description"
   echo "$DISPLAY_NAME - $DESCRIPTION"

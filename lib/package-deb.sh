@@ -67,6 +67,29 @@ find "$PKG/usr/bin" -type f -exec chmod 755 {} + 2>/dev/null || true
     done
     printf '\n'
   fi
+  # Packages that own the same paths as this repack (e.g. the vendor's own
+  # deb under a different name). Conflicts forbids co-install; Replaces lets
+  # dpkg silently take over the overlapping files during the swap.
+  if [[ -n "${CONFLICTS_DEB:-}" ]] && (( ${#CONFLICTS_DEB[@]} )); then
+    printf 'Conflicts: '
+    first=1
+    for d in "${CONFLICTS_DEB[@]}"; do
+      (( first )) || printf ', '
+      printf '%s' "$d"
+      first=0
+    done
+    printf '\n'
+  fi
+  if [[ -n "${REPLACES_DEB:-}" ]] && (( ${#REPLACES_DEB[@]} )); then
+    printf 'Replaces: '
+    first=1
+    for d in "${REPLACES_DEB[@]}"; do
+      (( first )) || printf ', '
+      printf '%s' "$d"
+      first=0
+    done
+    printf '\n'
+  fi
   echo "Maintainer: mensylisir <710080675@qq.com>"
   echo "Homepage: $URL"
   echo "Description: $DISPLAY_NAME"
