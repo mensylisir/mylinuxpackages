@@ -190,9 +190,20 @@ recipe_stage() {
     # International launcher: run the app's own start.sh.
     cat > "$ROOT$prefix/start.sh" <<'EOF'
 #!/bin/sh
+unset ELECTRON_RUN_AS_NODE
+export CHROME_DESKTOP='workbuddy-international.desktop'
+export ELECTRON_FORCE_IS_PACKAGED=1
+DATA_DIR="${WORKBUDDY_USER_DATA_DIR:-${WORKBUDDY_INTL_CONFIG_DIR:-$HOME/.workbuddy-international}}"
+STATE_DIR="$DATA_DIR/app"
+STATE_FILE="$STATE_DIR/shortcut-state.json"
+if [ "${XDG_SESSION_TYPE:-}" = wayland ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
+  if [ ! -f "$STATE_FILE" ]; then
+    mkdir -p "$STATE_DIR" && printf '%s\n' '{"version":1,"toggleWindowAccelerator":""}' >"$STATE_FILE" || true
+  fi
+fi
 exec "$(dirname "$0")/workbuddy" --no-sandbox --disable-dev-shm-usage \
   --disable-gpu-sandbox --in-process-gpu --ozone-platform-hint=auto \
-  --enable-wayland-ime --class=workbuddy-international "$@"
+  --enable-wayland-ime --user-data-dir="$DATA_DIR" --class=workbuddy-international "$@"
 EOF
     chmod 755 "$ROOT$prefix/start.sh"
     cat > "$ROOT/usr/bin/$launcher" <<EOF
@@ -208,7 +219,7 @@ EOF
     cat > "$ROOT/usr/bin/$launcher" <<'EOF'
 #!/bin/sh
 unset ELECTRON_RUN_AS_NODE
-export CHROME_DESKTOP='workbuddy.desktop'
+export CHROME_DESKTOP='WorkBuddy.desktop'
 export ELECTRON_FORCE_IS_PACKAGED=1
 if [ "${XDG_SESSION_TYPE:-}" = wayland ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
   STATE_DIR="${WORKBUDDY_USER_DATA_DIR:-${WORKBUDDY_CONFIG_DIR:-${CODEBUDDY_CONFIG_DIR:-$HOME/.workbuddy}}/app}"

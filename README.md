@@ -74,11 +74,14 @@ deb/rpm 内容一致。maintainer scripts 通过 `.mlp-postinst` / `.mlp-postrm`
 
 - **WorkBuddy / WorkBuddy International**：Electron 是官方 Linux deb 中的定制版本，
   带有私有 `workbuddyStorage` binding；构建时会强制校验，不能替换成普通 Electron。
+  两个启动器都会预写 `shortcut-state.json`，避免 Wayland 下首次启动弹出
+  “Add keyboard”/快捷键录入窗口；国际版使用独立的 `~/.workbuddy-international`。
 - **CatPaw / 妙手**：从 Windows Inno Setup 安装包移植，自带 Electron、Node 与
   Python runtime，原生模块按 Electron ABI 146 编译或替换，并处理 Linux overlay
   与 skill manifest。
 - **Kimi Work**：从 Windows NSIS 安装包移植，保留 Linux 工具链、剔除 win32 组件，
-  自带 Electron 43 并固定 CN/Intl 区域。
+  自带 Electron 43 并固定 CN/Intl 区域；三个变体都会关闭 launcher 全局快捷键，
+  避免 XDG GlobalShortcuts 弹窗。
 - **Qoder / Trae / ZCode / MiMo / DuMate**：优先使用上游 Linux 包或 tarball，
   在本仓库内完成重打包、区域固定、资源路径修正和启动脚本生成。
 

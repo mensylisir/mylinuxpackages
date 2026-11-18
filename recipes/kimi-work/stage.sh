@@ -10,11 +10,11 @@ set -euo pipefail
 source "$MLP_ROOT/lib/stage-common.sh"
 
 recipe_stage() {
-  local region="" appname="" prefix launcher desktopname
+  local region="" appname="" prefix launcher desktopname wmclass
   case "$APP_ID" in
-    kimi-work-cn)    region="china";    appname="kimi-desktop-cn"; prefix="/opt/kimi-work-cn"; launcher="kimi-work-cn"; desktopname="kimi-work-cn.desktop" ;;
-    kimi-work-intl)  region="overseas"; appname="kimi-desktop-intl"; prefix="/opt/kimi-work-intl"; launcher="kimi-work"; desktopname="kimi-work-intl.desktop" ;;
-    *)               prefix="/opt/kimi-work"; launcher="kimi-work"; desktopname="kimi-work.desktop" ;;
+    kimi-work-cn)    region="china";    appname="kimi-desktop-cn"; prefix="/opt/kimi-work-cn"; launcher="kimi-work-cn"; desktopname="kimi-work-cn.desktop"; wmclass="kimi-work-cn" ;;
+    kimi-work-intl)  region="overseas"; appname="kimi-desktop-intl"; prefix="/opt/kimi-work-intl"; launcher="kimi-work-intl"; desktopname="kimi-work-intl.desktop"; wmclass="kimi-work-intl" ;;
+    *)               prefix="/opt/kimi-work"; launcher="kimi-work"; desktopname="kimi-work.desktop"; wmclass="kimi-desktop" ;;
   esac
 
   need 7z "p7zip-full"
@@ -69,7 +69,10 @@ DAIMON
 exec env ELECTRON_RUN_AS_NODE=1 "$KIMI_ELECTRON" "$@"
 NODE
 
-  # Region pin (cn/intl only); base edition keeps upstream behaviour.
+  # Disable the launcher global shortcut in all three variants so Wayland does
+  # not show the XDG GlobalShortcuts "Add keyboard" prompt on first launch.
+  node "$MLP_ROOT/lib/patch/kimi-work-shortcut.cjs" "$asardir"
+  # Region pin only for cn/intl; base edition keeps upstream behaviour.
   if [[ -n "$region" ]]; then
     node "$MLP_ROOT/lib/patch/kimi-work-region.cjs" "$asardir" "$region" "$appname"
   fi
@@ -94,6 +97,8 @@ NODE
   # Launcher (own implementation) — point resource env vars at our prefix.
   cat > "$ROOT/usr/bin/$launcher" <<EOF
 #!/bin/sh
+unset ELECTRON_RUN_AS_NODE
+export CHROME_DESKTOP='$desktopname'
 BASE="$prefix"
 export KIMI_ELECTRON="\$BASE/electron/electron"
 export DAIMON_BUNDLE_DIR="\$BASE/resources/daimon-bundle"
@@ -105,7 +110,7 @@ EOF
     printf 'export KIMI_AGENT_REGION=%s\n' "$rk" >> "$ROOT/usr/bin/$launcher"
   fi
   cat >> "$ROOT/usr/bin/$launcher" <<'EOF'
-exec "$KIMI_ELECTRON" "$BASE/app.asar" "$@"
+exec "$KIMI_ELECTRON" --no-sandbox --class=$wmclass "$BASE/app.asar" "$@"
 EOF
   chmod 755 "$ROOT/usr/bin/$launcher"
 

@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=MiniMax Code
 Comment=MiniMax Code desktop client (international)
-Exec=minimax-code %U
+Exec=minimax-code-intl %U
 Icon=minimax-code-intl
 Terminal=false
 Type=Application

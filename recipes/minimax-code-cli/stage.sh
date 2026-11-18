@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # minimax-code-cli — terminal AI agent distributed as npm tarballs. No Electron:
 # assemble a node_modules tree from pinned npm sources plus a matching
-# prebuilt better-sqlite3 binding, and launch via the system Node.
+# prebuilt better-sqlite3 binding and a private Node 26 runtime (ABI 147).
 set -euo pipefail
 source "$MLP_ROOT/lib/stage-common.sh"
 
@@ -49,16 +49,22 @@ recipe_stage() {
   local prefix="/opt/$PKG_NAME"
   mkdir -p "$ROOT$prefix"
   copy_tree "$nm" "$ROOT$prefix/node_modules"
+
+  # Bundle the exact Node ABI the prebuilt better-sqlite3 binding needs.
+  local nodedist="$WORK/node-dist"
+  clean_dir "$nodedist"; mkdir -p "$nodedist"
+  tar -xJf "$(fetched "node-v26.13.1-linux-x64.tar.xz")" -C "$nodedist" \
+    --strip-components=1 --no-same-owner --touch
+  copy_tree "$nodedist" "$ROOT$prefix/runtime/node"
   find "$ROOT$prefix" -type d -exec chmod 755 {} +
 
-  # The binding is built for the system Node ABI, so both launchers pin it.
   cat > "$ROOT/usr/bin/mcode" <<EOF
 #!/bin/sh
-exec /usr/bin/node $prefix/node_modules/@minimax-ai/code/cli.js "\$@"
+exec $prefix/runtime/node/bin/node $prefix/node_modules/@minimax-ai/code/cli.js "\$@"
 EOF
   cat > "$ROOT/usr/bin/mcode-tools" <<EOF
 #!/bin/sh
-exec /usr/bin/node $prefix/node_modules/@minimax-ai/code/mcode-tools.js "\$@"
+exec $prefix/runtime/node/bin/node $prefix/node_modules/@minimax-ai/code/mcode-tools.js "\$@"
 EOF
   chmod 755 "$ROOT/usr/bin/mcode" "$ROOT/usr/bin/mcode-tools"
   install -Dm644 "$(fetched LICENSE)" \

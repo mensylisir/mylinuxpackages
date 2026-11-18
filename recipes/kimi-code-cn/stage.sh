@@ -8,13 +8,13 @@ source "$MLP_ROOT/lib/stage-common.sh"
 recipe_stage() {
   local cn=0
   [[ "$APP_ID" == kimi-code-cn ]] && cn=1
-  local prefix appname region launcher
+  local prefix appname region launcher binname
   if (( cn )); then
     prefix="/opt/kimi-code-cn"; appname="kimi-code-app-cn"; region="mainland-cn"
-    launcher="kimi-code-cn"
+    launcher="kimi-code-cn"; binname="kimi-code-cn"
   else
     prefix="/opt/kimi-code-intl"; appname="kimi-code-app-intl"; region="global"
-    launcher="kimi-code"
+    launcher="kimi-code-intl"; binname="kimi-code"
   fi
 
   local deb; deb="$(fetched_remote)"
@@ -47,7 +47,9 @@ recipe_stage() {
   # Launcher.
   cat > "$ROOT/usr/bin/$launcher" <<EOF
 #!/bin/sh
-exec "$prefix/$launcher" "\$@"
+unset ELECTRON_RUN_AS_NODE
+export CHROME_DESKTOP='$launcher.desktop'
+exec "$prefix/$binname" --class=$launcher "\$@"
 EOF
   chmod 755 "$ROOT/usr/bin/$launcher"
 

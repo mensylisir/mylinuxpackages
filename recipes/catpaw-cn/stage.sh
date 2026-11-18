@@ -186,7 +186,9 @@ EOF
 
   cat > "$ROOT/usr/bin/$APP_NAME" <<EOF
 #!/bin/sh
-exec /opt/$appdir/$APP_NAME --no-sandbox --disable-dev-shm-usage "\$@"
+unset ELECTRON_RUN_AS_NODE
+export CHROME_DESKTOP='${desktop}'
+exec /opt/$appdir/$APP_NAME --no-sandbox --disable-dev-shm-usage --class=${desktop%.desktop} "\$@"
 EOF
   chmod 755 "$ROOT/usr/bin/$APP_NAME"
   install -m644 "$PKG_DIR/$desktop" "$ROOT/usr/share/applications/$desktop"

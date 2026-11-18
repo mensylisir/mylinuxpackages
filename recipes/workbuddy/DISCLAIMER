@@ -26,10 +26,10 @@ runtime and Linux helper binaries from Tencent's official domestic Linux deb.
   the client falls back to the unavailable backend), the WeChat Pay plugin
   (no Linux build), and the Tencent Docs deep-collaboration engine (the
   official Linux SDK shipped by the deb is older than the Windows payload).
-- When installed alongside the international port (workbuddy-intl-agent) both
-  editions use the same ~/.workbuddy data directory and the workbuddy:// URI
-  scheme. Run one at a time, or export WORKBUDDY_CONFIG_DIR to a different
-  path for one of them, otherwise the single-instance lock and the profile
-  database are shared.
+- The domestic edition uses ~/.workbuddy by default. The international edition
+  uses ~/.workbuddy-international (override with WORKBUDDY_USER_DATA_DIR or
+  WORKBUDDY_INTL_CONFIG_DIR), and the two desktop entries register different
+  URI schemes (workbuddy vs workbuddy-ai). They can be installed side by side
+  without sharing the single-instance lock or profile database.
 - Do NOT report issues with this port to Tencent's official support
   channels. File issues with the community port project instead.

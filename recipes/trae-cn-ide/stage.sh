@@ -7,9 +7,9 @@ source "$MLP_ROOT/lib/stage-common.sh"
 recipe_stage() {
   local cn=0
   [[ "$APP_ID" == trae-cn-ide ]] && cn=1
-  local launcher appdir desktop
-  if (( cn )); then launcher="trae-cn"; appdir="trae-cn"; desktop="trae-cn.desktop"
-  else launcher="trae"; appdir="trae"; desktop="trae.desktop"; fi
+  local launcher appdir desktop wmclass
+  if (( cn )); then launcher="trae-cn"; appdir="trae-cn"; desktop="trae-cn.desktop"; wmclass="Trae-cn"
+  else launcher="trae"; appdir="trae"; desktop="trae.desktop"; wmclass="Trae"; fi
 
   local tgz; tgz="$(fetched_remote)"
   local unpack="$WORK/unpack"
@@ -27,9 +27,11 @@ recipe_stage() {
   copy_tree "$srcdir" "$ROOT/opt/$appdir"
   chmod 4755 "$ROOT/opt/$appdir/chrome-sandbox" 2>/dev/null || true
 
-  # Launcher: upstream ships trae.sh; keep it if present, else generate.
-  if [[ -f "$srcdir/trae.sh" || -f "$srcdir/trae-cn.sh" ]]; then
-    local up="$srcdir/trae.sh"; (( cn )) && up="$srcdir/trae-cn.sh"
+  # Launcher: prefer this edition's upstream launcher; fall back safely.
+  local up=""
+  if (( cn )); then up="$srcdir/trae-cn.sh"; else up="$srcdir/trae.sh"; fi
+  if [[ -f "$up" ]] || { (( cn )) && [[ -f "$srcdir/trae.sh" ]]; }; then
+    [[ -f "$up" ]] || up="$srcdir/trae.sh"
     install -m755 "$up" "$ROOT/usr/bin/$launcher"
   else
     local mainbin
@@ -37,7 +39,7 @@ recipe_stage() {
     [[ -n "$mainbin" ]] || mainbin="$(find "$ROOT/opt/$appdir" -maxdepth 1 -type f -executable -printf '%f\n' | head -1)"
     cat > "$ROOT/usr/bin/$launcher" <<EOF
 #!/bin/sh
-exec /opt/$appdir/$mainbin "\$@"
+exec /opt/$appdir/$mainbin --class=$wmclass "\$@"
 EOF
     chmod 755 "$ROOT/usr/bin/$launcher"
   fi

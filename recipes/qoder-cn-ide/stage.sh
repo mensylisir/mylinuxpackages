@@ -55,7 +55,7 @@ recipe_stage() {
   local runname
   if [[ -f "$ROOT/usr/lib/$libdir/app.asar" ]]; then runname="app.asar"
   elif [[ -d "$ROOT/usr/lib/$libdir/app" ]]; then runname="app"
-  else runname="app.asar.unpacked"; fi
+  else die "no Electron app entry under /usr/lib/$libdir"; fi
 
   # sharp's libvips is referenced via a relative path from /usr/lib/<app>/lib.
   if [[ -e "$ROOT/usr/lib/$libdir/app.asar.unpacked/node_modules/@img/sharp-libvips-linux-x64/lib/libvips-cpp.so.8.17.3" ]]; then
@@ -68,24 +68,33 @@ recipe_stage() {
   find "$unpack" -path '*/share/applications/*' -type f \( -name '*.desktop' \) -print0 2>/dev/null \
     | while IFS= read -r -d '' f; do
         install -m644 "$f" "$ROOT/usr/share/applications/$(basename "$f")"
-        sed -i -e "s|/opt/${appname^}/||g" -e "s|/usr/share/$libdir/||g" \
-          "$ROOT/usr/share/applications/$(basename "$f")" 2>/dev/null || true
+        local d="$ROOT/usr/share/applications/$(basename "$f")"
+        sed -i -e "s|/opt/${appname^}/||g" -e "s|/usr/share/$libdir/||g" "$d"
+        if grep -qE '^(Exec|Icon)=/(opt|usr/share)/' "$d"; then
+          die "desktop entry still has absolute source paths: $d"
+        fi
       done
   find "$unpack" -path '*/share/icons/*' -type f \( -name '*.png' -o -name '*.svg' \) -print0 2>/dev/null \
     | while IFS= read -r -d '' f; do
         rel="${f#*/share/icons/}"; install -Dm644 "$f" "$ROOT/usr/share/icons/$rel"
       done
 
+  # Pick the desktop id actually shipped by this rpm variant.
+  local desktop_id="$launcher.desktop"
+  if [[ ! -f "$ROOT/usr/share/applications/$desktop_id" ]]; then
+    desktop_id="$(find "$ROOT/usr/share/applications" -maxdepth 1 -type f -name '*.desktop' -printf '%f\n' | head -1)"
+    [[ -n "$desktop_id" ]] || die "no desktop entry shipped in rpm"
+  fi
+
   # Launcher: use bundled Electron with the override preload.
   cat > "$ROOT/usr/bin/$launcher" <<EOF
 #!/bin/bash
 set -e
 export _APPDIR="/usr/lib/$libdir"
-export CHROME_DESKTOP="$launcher.desktop"
+export CHROME_DESKTOP="$desktop_id"
 export LD_LIBRARY_PATH="\${_APPDIR}/lib:\${LD_LIBRARY_PATH:-}"
-SANDBOX=()
-if [ "\${EUID}" -eq 0 ] && [ "\${ELECTRON_RUN_AS_NODE}" != 1 ]; then SANDBOX=(--no-sandbox); fi
-exec "$electron_bin" "\${SANDBOX[@]}" --require "\${_APPDIR}/$launcher.js" \
+unset ELECTRON_RUN_AS_NODE
+exec "$electron_bin" --no-sandbox --require "\${_APPDIR}/$launcher.js" \
   --app "\${_APPDIR}/$runname" "\$@"
 EOF
   chmod 755 "$ROOT/usr/bin/$launcher"

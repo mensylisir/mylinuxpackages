@@ -53,8 +53,12 @@ recipe_stage() {
 
   cat > "$ROOT/usr/bin/$launcher" <<EOF
 #!/bin/sh
+unset ELECTRON_RUN_AS_NODE
+export CHROME_DESKTOP='$desktopname'
 export ZCODE_APP_DIR="$prefix"
-exec "$prefix/zcode" "\$@"
+UDD="\${XDG_CONFIG_HOME:-\$HOME/.config}/$appname"
+mkdir -p "\$UDD"
+exec "$prefix/zcode" --user-data-dir="\$UDD" --class=zcode "\$@"
 EOF
   chmod 755 "$ROOT/usr/bin/$launcher"
   chmod 4755 "$ROOT$prefix/chrome-sandbox" 2>/dev/null || true
