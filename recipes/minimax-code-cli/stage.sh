@@ -47,7 +47,7 @@ recipe_stage() {
   chmod 755 "$nm/@minimax-ai/code/internal-bin/mcode-tools" 2>/dev/null || true
 
   local prefix="/opt/$PKG_NAME"
-  mkdir -p "$ROOT$prefix"
+  mkdir -p "$ROOT$prefix" "$ROOT/usr/bin"
   copy_tree "$nm" "$ROOT$prefix/node_modules"
 
   # Bundle the exact Node ABI the prebuilt better-sqlite3 binding needs.

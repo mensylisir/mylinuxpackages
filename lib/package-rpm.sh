@@ -85,8 +85,15 @@ SPEC="$BUILDROOT/SPECS/$PKG_NAME.spec"
   fi
 } > "$SPEC"
 
+# Repacked upstream binaries are already stripped and must not be touched:
+# rpm's brp-strip/brp-compress choke on paths with spaces (e.g. "/opt/Xiaomi
+# MiMo AI") and on leftover Windows objects shipped inside bundled runtimes.
 rpmbuild --define "_topdir $BUILDROOT" \
          --define "_build_id_links none" \
+         --define "debug_package %{nil}" \
+         --define "__strip /bin/true" \
+         --define "__objdump /bin/true" \
+         --define "__os_install_post %{nil}" \
          -bb "$SPEC" >"$BUILDROOT/rpmbuild.log" 2>&1 || {
   tail -n 80 "$BUILDROOT/rpmbuild.log" >&2
   echo "--- spec ---" >&2

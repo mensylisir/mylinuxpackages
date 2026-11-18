@@ -69,8 +69,8 @@ recipe_stage() {
     | while IFS= read -r -d '' f; do
         install -m644 "$f" "$ROOT/usr/share/applications/$(basename "$f")"
         local d="$ROOT/usr/share/applications/$(basename "$f")"
-        sed -i -e "s|/opt/${appname^}/||g" -e "s|/usr/share/$libdir/||g" "$d"
-        if grep -qE '^(Exec|Icon)=/(opt|usr/share)/' "$d"; then
+        fix_desktop_entry "$d" "$launcher"
+        if grep -qE '^(Exec|TryExec|Icon)=/(opt|usr/share)/' "$d"; then
           die "desktop entry still has absolute source paths: $d"
         fi
       done

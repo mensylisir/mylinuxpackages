@@ -107,6 +107,30 @@ fetched_glob() {
 
 # Install an icon at every hicolor size, generating missing sizes from the
 # largest source PNG with ImageMagick when available.
+# Usage: fix_desktop_entry <desktop-file> <exec-name>
+#
+# Vendor .desktop files point at the unpacked rpm layout (/opt/<Vendor>/...,
+# /usr/share/<vendor>/...). Rewrite them so they launch our installed wrapper
+# and reference icons by name, which is case- and path-independent.
+fix_desktop_entry() {
+  local d="$1" exe="$2" tmp
+  [[ -f "$d" ]] || return 0
+  tmp="$d.mlp-tmp"
+  awk -v exe="$exe" '
+    /^Exec=/    { print "Exec=" exe " %U"; next }
+    /^TryExec=/ { print "TryExec=" exe; next }
+    /^Icon=/    {
+                  v = $0; sub(/^Icon=/, "", v)
+                  if (v ~ /\//) {
+                    n = split(v, a, "/"); v = a[n]
+                    sub(/\.(png|svg|xpm)$/, "", v)
+                  }
+                  print "Icon=" v; next
+                }
+    { print }
+  ' "$d" > "$tmp" && mv "$tmp" "$d"
+}
+
 # Usage: install_icon_set <src-png> <dest-name>
 install_icon_set() {
   local src="$1" name="$2" size

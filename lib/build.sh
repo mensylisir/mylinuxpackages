@@ -53,31 +53,8 @@ if [[ -z "$STAGE_MODE" && -f "$PKG_DIR/stage.sh" ]]; then
   STAGE_MODE=recipe
 fi
 
-case "$STAGE_MODE" in
-  recipe)
-    say "[$APP_ID] assembling root via recipe stage.sh"
-    # shellcheck source=/dev/null
-    source "$PKG_DIR/stage.sh"
-    declare -f recipe_stage >/dev/null || die "stage.sh must define recipe_stage()"
-    recipe_stage >&2
-    ;;
-  generic|legacy)
-    generic_stage >&2
-    ;;
-  *)
-    die "unknown STAGE_MODE: $STAGE_MODE (need stage.sh or STAGE_MODE=generic)"
-    ;;
-esac
-
-[[ -d "$ROOT" ]] || die "stage produced no root directory"
-# Common finishing touches that apply to every package.
-find "$ROOT" -type f -name '*.node' -exec chmod 755 {} + 2>/dev/null || true
-find "$ROOT/usr/bin" -type f -exec chmod 755 {} + 2>/dev/null || true
-find "$ROOT" -type f \( -name '*.desktop' -o -name '*.png' -o -name '*.svg' \) \
-  -exec chmod 644 {} + 2>/dev/null || true
-
-echo "$ROOT"
-say "[$APP_ID] root ready at $ROOT"
+# Dispatch and post-processing live at the bottom of this file, after the
+# function definitions below have been parsed.
 
 # ---------------------------------------------------------------------------
 # Legacy generic Electron-repack pipeline (minimax-code-cn / intl).
@@ -182,3 +159,36 @@ generic_stage() {
   declare -f recipe_install >/dev/null && recipe_install
   write_postinst; write_postrm
 }
+
+# ---------------------------------------------------------------------------
+# Dispatch
+#
+# Kept below the function definitions: `generic_stage` is defined above, and a
+# function must exist before bash reaches the call site.
+# ---------------------------------------------------------------------------
+case "$STAGE_MODE" in
+  recipe)
+    say "[$APP_ID] assembling root via recipe stage.sh"
+    # shellcheck source=/dev/null
+    source "$PKG_DIR/stage.sh"
+    declare -f recipe_stage >/dev/null || die "stage.sh must define recipe_stage()"
+    recipe_stage >&2
+    ;;
+  generic|legacy)
+    generic_stage >&2
+    ;;
+  *)
+    die "unknown STAGE_MODE: $STAGE_MODE (need stage.sh or STAGE_MODE=generic)"
+    ;;
+esac
+
+[[ -d "$ROOT" ]] || die "stage produced no root directory"
+
+# Common finishing touches that apply to every package.
+find "$ROOT" -type f -name '*.node' -exec chmod 755 {} + 2>/dev/null || true
+find "$ROOT/usr/bin" -type f -exec chmod 755 {} + 2>/dev/null || true
+find "$ROOT" -type f \( -name '*.desktop' -o -name '*.png' -o -name '*.svg' \) \
+  -exec chmod 644 {} + 2>/dev/null || true
+
+echo "$ROOT"
+say "[$APP_ID] root ready at $ROOT"

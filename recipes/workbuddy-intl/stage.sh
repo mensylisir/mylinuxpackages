@@ -41,11 +41,9 @@ recipe_stage() {
   # --- 1. Donor runtime from official Linux deb (custom Electron) -----------
   info "extracting official Linux donor (custom Electron)"
   mkdir -p "$W/deb"
+  # deb_extract already unpacks control.tar.* and data.tar.* into the target.
   deb_extract "$hostdeb" "$W/deb"
-  mkdir -p "$W/donor"
-  tar -xmf "$(find "$W/deb" -maxdepth 1 -name 'data.tar*' | head -1)" -C "$W/donor" \
-    --no-same-owner --touch
-  local host="$W/donor/opt/WorkBuddy"
+  local host="$W/deb/opt/WorkBuddy"
   [[ -x "$host/workbuddy" ]] || die "donor deb lacks workbuddy Electron"
   local ever; ever="$(cat "$host/version")"
   [[ "$ever" == "${EXPECTED_ELECTRON}-"* ]] || die "unexpected donor Electron $ever"

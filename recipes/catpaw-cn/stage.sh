@@ -99,7 +99,8 @@ recipe_stage() {
   find "$nm/node-pty" -name '*.node' -path '*/build/*' -delete 2>/dev/null || true
 
   build_gyp() {
-    local t="$1" name="$2" work="$W/gyp-$name"
+    local t="$1" name="$2"
+    local work="$W/gyp-$name"
     info "building $name"
     pkg_extract "$t" "$work"
     [[ "$name" == node-pty ]] && pkg_extract "$(fetched_glob 'node-addon-api-*.tgz')" "$work/node_modules/node-addon-api"
