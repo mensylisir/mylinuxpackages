@@ -108,9 +108,9 @@ jobs:
           if [ -z "$RECIPE" ] || [ "$RECIPE" = "all" ]; then
             JSON=$(find recipes -mindepth 1 -maxdepth 1 -type d -printf '%f\n' \
               | sort \
-              | jq -R -s 'split("\n") | map(select(length>0))')
+              | jq -R -s -c 'split("\n") | map(select(length>0))')
           else
-            JSON=$(printf '%s' "$RECIPE" | jq -R -s 'split("\n") | map(select(length>0))')
+            JSON=$(printf '%s' "$RECIPE" | jq -R -s -c 'split("\n") | map(select(length>0))')
           fi
           echo "matrix={\"recipe\":$JSON}" >> "$GITHUB_OUTPUT"
 
