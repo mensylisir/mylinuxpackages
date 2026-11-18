@@ -22,6 +22,7 @@ recipes/<app-id>/
   *.sh / *.desktop / icons / launchers
 .github/workflows/
   build-packages.yml     手动触发或 tag 触发，构建并发布
+docs/assets/             README 用到的图片（打赏码）
 out/                     本地构建产物（gitignore）
 ```
 
@@ -107,3 +108,11 @@ deb/rpm 内容一致。maintainer scripts 通过 `.mlp-postinst` / `.mlp-postrm`
 
 > myaur 中的包名风格（例如 `-bin` 后缀）在部分配方中保留，目的是保持产物名稳定；
 > 这不代表运行时依赖 myaur。
+
+## 打赏
+
+如果这些包省了你的时间，可以请我喝杯咖啡。
+
+| 支付宝 | 微信 |
+|---|---|
+| <img src="docs/assets/donate-alipay.jpg" width="260" alt="支付宝收款码"> | <img src="docs/assets/donate-wechat.jpg" width="260" alt="微信收款码"> |
