@@ -1,0 +1,115 @@
+name: build-packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      recipe:
+        description: 'Recipe to build'
+        required: true
+        type: choice
+        options:
+          - minimax-code-cn
+          - minimax-code-intl
+          - all
+        default: all
+      target:
+        description: 'Package format'
+        required: true
+        type: choice
+        options:
+          - all
+          - deb
+          - rpm
+        default: all
+      tag:
+        description: 'Release tag (blank = v<version> from recipe)'
+        required: false
+        type: string
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-packages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve recipe matrix
+        id: set-matrix
+        shell: bash
+        run: |
+          RECIPE="${{ inputs.recipe }}"
+          if [ -z "$RECIPE" ] || [ "$RECIPE" = "all" ]; then
+            JSON=$(find recipes -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | jq -R -s 'split("\n") | map(select(length>0))')
+          else
+            JSON=$(printf '%s' "$RECIPE" | jq -R -s 'split("\n") | map(select(length>0))')
+          fi
+          echo "matrix={\"recipe\":$JSON}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y p7zip-full unzip rpm file xz-utils node-gyp \
+            build-essential python3 curl
+          npm install -g node-gyp
+
+      - name: Build recipe ${{ matrix.recipe }}
+        shell: bash
+        run: |
+          TARGET="${{ inputs.target }}"
+          [ -z "$TARGET" ] && TARGET=all
+          ./build-package.sh "recipes/${{ matrix.recipe }}/recipe.conf" --"$TARGET"
+
+      - name: Determine release tag
+        id: tag
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            VER=$(grep -E '^VERSION=' "recipes/${{ matrix.recipe }}/recipe.conf" | head -1 | cut -d'"' -f2)
+            TAG="v${VER}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            out/*.deb
+            out/*.rpm
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts (backup)
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ matrix.recipe }}
+          path: |
+            out/*.deb
+            out/*.rpm
+          if-no-files-found: warn
