@@ -78,6 +78,9 @@ jobs:
         run: |
           # One release per run: every recipe uploads into the same tag, so
           # parallel jobs never race to create different releases.
+          #
+          # A "v<something>--recipe-a,recipe-b" tag builds only the listed
+          # recipes; the "--..." suffix is stripped from the release tag.
           if [ -n "${INPUT_TAG}" ]; then
             TAG="${INPUT_TAG}"
           elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
@@ -85,7 +88,11 @@ jobs:
           else
             TAG="v$(date -u +%Y%m%d)-${GITHUB_RUN_NUMBER}"
           fi
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG%%--*}" >> "$GITHUB_OUTPUT"
+          case "$TAG" in
+            *--*) echo "only=${TAG#*--}" >> "$GITHUB_OUTPUT" ;;
+            *)    echo "only=" >> "$GITHUB_OUTPUT" ;;
+          esac
 
       - name: Ensure release exists
         shell: bash
@@ -103,8 +110,16 @@ jobs:
       - name: Resolve recipe matrix
         id: set-matrix
         shell: bash
+        env:
+          RECIPE_INPUT: ${{ inputs.recipe }}
+          ONLY: ${{ steps.set-tag.outputs.only }}
         run: |
-          RECIPE="${{ inputs.recipe }}"
+          # Priority: explicit tag suffix (debug subset) > dispatch input > all.
+          if [ -n "${ONLY}" ]; then
+            RECIPE=$(printf '%s' "${ONLY}" | tr ',' '\n')
+          else
+            RECIPE="${RECIPE_INPUT}"
+          fi
           if [ -z "$RECIPE" ] || [ "$RECIPE" = "all" ]; then
             JSON=$(find recipes -mindepth 1 -maxdepth 1 -type d -printf '%f\n' \
               | sort \
@@ -137,7 +152,29 @@ jobs:
           TARGET_INPUT: ${{ inputs.target }}
         run: |
           TARGET="${TARGET_INPUT:-all}"
-          ./build-package.sh "recipes/${{ matrix.recipe }}/recipe.conf" --"$TARGET"
+          set -o pipefail
+          ./build-package.sh "recipes/${{ matrix.recipe }}/recipe.conf" --"$TARGET" \
+            2>&1 | tee "/tmp/build-${{ matrix.recipe }}.log"
+
+      - name: Publish failure log
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          # Logs are not readable anonymously, so surface the tail of the failed
+          # build as a public release asset.
+          LOG="/tmp/build-${{ matrix.recipe }}.log"
+          OUT="fail-${{ matrix.recipe }}.txt"
+          {
+            echo "recipe: ${{ matrix.recipe }}"
+            echo "target: ${TARGET_INPUT:-all}"
+            echo "runner: $(uname -a)"
+            echo "--- last 200 lines ---"
+            tail -n 200 "$LOG" 2>/dev/null || echo "(no log captured)"
+          } > "$OUT"
+          gh release upload "$TAG" "$OUT" --clobber || true
 
       - name: Upload to release
         uses: softprops/action-gh-release@v2
