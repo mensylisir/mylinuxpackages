@@ -47,8 +47,14 @@ EOF
 
   install -m644 "$PKG_DIR/$desktop" "$ROOT/usr/share/applications/$desktop"
   local icon="$ROOT/opt/$appdir/resources/app/resources/linux/code.png"
-  [[ -f "$icon" ]] && install -Dm644 "$icon" \
-    "$ROOT/usr/share/icons/hicolor/512x512/apps/$launcher.png"
+  # Both editions ship the same code.png; badge it so they are distinguishable.
+  if [[ -f "$icon" ]]; then
+    if (( cn )); then
+      install_icon_badged_set "$icon" "$launcher" CN '#C8102E'
+    else
+      install_icon_badged_set "$icon" "$launcher" INTL '#2C549E'
+    fi
+  fi
 
   # Licenses + shell completions.
   local lic="$ROOT/opt/$appdir/resources/app/LICENSE.txt"

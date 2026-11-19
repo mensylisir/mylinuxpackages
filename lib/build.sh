@@ -30,6 +30,8 @@ for v in APP_ID PKG_NAME VERSION DISPLAY_NAME STRING_NAME URL DESCRIPTION; do re
 ARCH="${ARCH:-x86_64}"
 PKG_DIR="$(cd "$(dirname "$RECIPE_FILE")" && pwd)"
 WORK="${WORK:-$MLP_ROOT/.build/${APP_ID}}"
+[[ "$(basename "$WORK")" == "$APP_ID" ]] || \
+  die "WORK must be per-recipe ($WORK does not end with $APP_ID)"
 SRC="$WORK/src"
 ROOT="$WORK/root"
 STAGE="$WORK/stage"
@@ -37,9 +39,18 @@ CACHE_DIR="${CACHE_DIR:-$MLP_ROOT/.cache}"
 
 need curl; need sha256sum; need tar; need unzip; need node
 
+mkdir -p "$WORK"
+# Two builds sharing one staging tree overwrite each other: the loser ships a
+# mixture of both apps (this is how an /opt/Xiaomi copy once ended up inside the
+# trae-cn package). Serialise on a lock instead of trusting the caller's WORK.
+exec 9>"$WORK/.build.lock"
+if command -v flock >/dev/null 2>&1; then
+  flock -n 9 || die "another build is already using $WORK"
+fi
+
 clean_dir "$WORK/src"; clean_dir "$WORK/root"; clean_dir "$WORK/stage"
 clean_dir "$WORK/payload"; clean_dir "$WORK/nsis"
-mkdir -p "$WORK" "$SRC" "$ROOT"
+mkdir -p "$SRC" "$ROOT"
 
 say "[$APP_ID $VERSION] fetching sources"
 mlp_fetch_all
@@ -189,6 +200,61 @@ find "$ROOT" -type f -name '*.node' -exec chmod 755 {} + 2>/dev/null || true
 find "$ROOT/usr/bin" -type f -exec chmod 755 {} + 2>/dev/null || true
 find "$ROOT" -type f \( -name '*.desktop' -o -name '*.png' -o -name '*.svg' \) \
   -exec chmod 644 {} + 2>/dev/null || true
+
+# --- ship-blocking sanity pass ---------------------------------------------
+# Two bug classes reached releases and broke installed launchers:
+#   1. build-time paths baked into shipped files ($ROOT expanded inside a
+#      launcher heredoc) — works in CI, dead on the target machine;
+#   2. "\$" written into a generated launcher (single quotes / quoted heredoc
+#      never expand it), leaving a literal "\$BASE/..." that cannot exec.
+# Both are cheap to detect here and impossible to notice before install.
+validate_stage_output() {
+  local f list="$WORK/validate-files.list"
+  # Only files this repo generates: launchers, desktop entries, units. App
+  # payloads legitimately embed upstream build paths (VS Code sourcemaps and
+  # product.json do), so they are out of scope.
+  : > "$list"
+  find "$ROOT/usr/bin" "$ROOT/usr/share/applications" \
+       "$ROOT/usr/lib/systemd/system" "$ROOT/etc" \
+       -type f -size -512k -print0 2>/dev/null > "$list" || true
+  while IFS= read -r -d '' f; do
+    # grep -I skips binaries; only text payloads can carry these bugs.
+    if grep -IqE '/home/runner/|/\.build/|\$ROOT|\$WORK' "$f" 2>/dev/null; then
+      die "build path leaked into shipped file: $f"
+    fi
+    if [[ "$(head -c 2 "$f" 2>/dev/null)" == '#!' ]] \
+       && grep -qE '^[[:space:]]*(exec|eval)[[:space:]].*\\\$' "$f" 2>/dev/null; then
+      die "shipped launcher keeps unexpandable \\\$ escapes: $f"
+    fi
+    # Launchers must never exec a shared object or a chromium helper: a bad
+    # "first executable found" fallback did exactly that and the package
+    # installed fine but never started.
+    if [[ "$(head -c 2 "$f" 2>/dev/null)" == '#!' ]]; then
+      local tgts="$WORK/.exec-targets" tgt
+      sed -n 's|^[[:space:]]*exec[[:space:]]*\(-[^[:space:]]*[[:space:]]*\)*"\?\([^"[:space:]]*\)"\?.*|\2|p' \
+        "$f" 2>/dev/null > "$tgts" || true
+      while IFS= read -r tgt; do
+        case "$tgt" in
+          *.so|*.so.*|*/chrome-sandbox|*/chrome_crashpad_handler)
+            die "launcher execs a non-app binary ($tgt): $f" ;;
+        esac
+      done < "$tgts"
+    fi
+  done < "$list"
+
+  # 3. Another recipe's payload grafted into this one. Happens when two builds
+  #    share a staging tree: the tree is cleaned by one build while the other is
+  #    still copying into it, so a second /opt/<app> tree lands inside the app
+  #    dir. Cheap to spot, impossible to spot after install.
+  local nested="$WORK/.nested-payload"
+  find "$ROOT/opt" "$ROOT/usr/lib" -mindepth 2 -type d \
+       \( -path "$ROOT/opt/*/opt" -o -path "$ROOT/opt/*/usr/lib" \
+          -o -path "$ROOT/usr/lib/*/opt" \) -print 2>/dev/null > "$nested" || true
+  if [[ -s "$nested" ]]; then
+    die "foreign payload nested inside this package: $(head -1 "$nested")"
+  fi
+}
+validate_stage_output
 
 echo "$ROOT"
 say "[$APP_ID] root ready at $ROOT"

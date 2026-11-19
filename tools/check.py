@@ -134,7 +134,22 @@ def check_recipes() -> None:
                     err(f"{rid}: sha256 mismatch for {os.path.basename(local)}")
 
 
-# --- 3. writes into directories nobody creates -------------------------------
+# --- 3. shell escaping in generated launchers --------------------------------
+def check_stage_escapes() -> None:
+    """`printf '...\\$VAR...'` / `echo '...\\$VAR...'` never expands.
+
+    Single quotes keep the backslash, so the installed launcher contains a
+    literal "\\$BASE/foo" and exec fails with "not found". This shipped once
+    (mimo-desktop) — catch it before the build.
+    """
+    for stage in sorted(glob.glob(os.path.join(ROOT, "recipes/*/stage.sh"))):
+        rid = os.path.basename(os.path.dirname(stage))
+        for i, line in enumerate(open(stage, encoding="utf-8"), 1):
+            if re.search(r"(?:printf|echo)\s+'[^']*\\\$[A-Za-z_{]", line):
+                err(f"{rid}: stage.sh:{i}: \\$ inside single quotes never expands: {line.strip()[:90]}")
+
+
+# --- 4. writes into directories nobody creates -------------------------------
 WRITE_PATTERNS = [
     re.compile(r'(?:^|&&|\|\||;|\bthen\b)\s*install\s+-(?!D|d)[0-9a-zA-Z]*\s+.*?"(\$(?:\{ROOT\}|ROOT)[^"]*)"'),
     re.compile(r'cat\s*>\s*"(\$(?:\{ROOT\}|ROOT)[^"]*)"'),
@@ -199,6 +214,7 @@ def check_stage_dirs() -> None:
 def main() -> int:
     check_syntax()
     check_recipes()
+    check_stage_escapes()
     check_stage_dirs()
 
     for w in warnings:

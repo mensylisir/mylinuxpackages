@@ -3,7 +3,10 @@
 set -euo pipefail
 
 MLP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WORK="${WORK:-$MLP_ROOT/.build}"
+# WORK is never defaulted here: it is per-recipe ($MLP_ROOT/.build/<app-id>) and
+# is resolved by build-package.sh / lib/build.sh *after* the recipe is sourced.
+# A shared default here silently collapsed every recipe into $MLP_ROOT/.build,
+# so parallel builds overwrote each other's staging trees and shipped garbage.
 
 # Progress goes to stderr so build.sh's stdout can carry only the root path.
 say() { printf '\n==> %s\n' "$*" >&2; }

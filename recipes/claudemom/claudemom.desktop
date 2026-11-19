@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=ClaudeMom
+Comment=把 Anthropic 兼容 API Key 变成 Claude 桌面版登录模式
+TryExec=claudemom
+Exec=claudemom %U
+Icon=claudemom
+Terminal=false
+Categories=Development;Network;
+StartupWMClass=com.bigpizzav3.claudemom

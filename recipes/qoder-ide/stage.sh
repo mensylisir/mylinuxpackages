@@ -46,6 +46,7 @@ recipe_stage() {
   # Electron's default_app.asar is not needed; keep LICENSE files.
   rm -f "$edir/resources/default_app.asar"
   local electron_bin="$edir/electron"
+  [[ -x "$electron_bin" ]] || die "bundled electron missing: $electron_bin"
 
   # Install resourcesPath override preload.
   install -m644 "$MLP_ROOT/lib/patch/qoder-resources.cjs" \
@@ -94,7 +95,7 @@ export _APPDIR="/usr/lib/$libdir"
 export CHROME_DESKTOP="$desktop_id"
 export LD_LIBRARY_PATH="\${_APPDIR}/lib:\${LD_LIBRARY_PATH:-}"
 unset ELECTRON_RUN_AS_NODE
-exec "$electron_bin" --no-sandbox --require "\${_APPDIR}/$launcher.js" \
+exec "/usr/lib/${libdir}-electron/electron" --no-sandbox --require "\${_APPDIR}/$launcher.js" \
   --app "\${_APPDIR}/$runname" "\$@"
 EOF
   chmod 755 "$ROOT/usr/bin/$launcher"
@@ -103,6 +104,10 @@ EOF
   # IDE build: install the bundled 512px icon into pixmaps and copy any
   # appdata / mime / shell-completion resources shipped in the rpm.
   install -Dm644 "$PKG_DIR/qoder-ide-512.png" "$ROOT/usr/share/pixmaps/qoder-ide.png"
+  # Upstream ships only that single pixmaps icon. Generate the hicolor set the
+  # rest of the recipes have, so docks/alt-tab pick a correctly sized asset
+  # instead of downscaling one 512px file.
+  install_icon_set "$PKG_DIR/qoder-ide-512.png" "$launcher"
   find "$unpack" -path '*/share/appdata/*' -type f -print0 2>/dev/null \
     | while IFS= read -r -d '' f; do install -Dm644 "$f" "$ROOT/usr/share/appdata/$(basename "$f")"; done
   find "$unpack" -path '*/share/mime/packages/*' -type f -print0 2>/dev/null \

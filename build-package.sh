@@ -28,6 +28,10 @@ for arg in "$@"; do
 done
 
 WORK="${WORK:-$MLP_ROOT/.build/${APP_ID}}"
+# An empty/inherited WORK used to collapse several parallel builds into one
+# shared $ROOT; they overwrote each other's staging trees and shipped garbage.
+[[ "$(basename "$WORK")" == "$APP_ID" ]] || \
+  die "WORK must be per-recipe ($WORK does not end with $APP_ID)"
 OUTDIR="${OUTDIR:-$MLP_ROOT/out}"
 mkdir -p "$OUTDIR"
 

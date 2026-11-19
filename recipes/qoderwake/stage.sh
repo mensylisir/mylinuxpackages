@@ -64,12 +64,15 @@ exec /usr/bin/$name portal
 CONSOLE
   chmod 755 "$ROOT/usr/lib/$libdir/$name-console"
 
+  # Upstream ships no desktop art for the two editions; badge the bundled logo.
   local logo="$unpack/resources/browser-connector/chrome-extension/qwork-logo-light.png"
-  [[ -f "$logo" ]] && install -Dm644 "$logo" \
-    "$ROOT/usr/share/icons/hicolor/512x512/apps/$name.png"
   local icon="$unpack/resources/browser-connector/chrome-extension/icons/icon-128.png"
-  [[ -f "$icon" ]] && install -Dm644 "$icon" \
-    "$ROOT/usr/share/icons/hicolor/128x128/apps/$name.png"
+  local label="INTL" bg="#2C549E"
+  if (( cn )); then label="CN"; bg="#C8102E"; fi
+  [[ -f "$logo" ]] && badge_icon "$logo" \
+    "$ROOT/usr/share/icons/hicolor/512x512/apps/$name.png" 512 "$label" "$bg"
+  [[ -f "$icon" ]] && badge_icon "$icon" \
+    "$ROOT/usr/share/icons/hicolor/128x128/apps/$name.png" 128 "$label" "$bg"
 
   if (( cn )); then
     cat > "$ROOT/usr/share/applications/$name.desktop" <<'DESKTOP'

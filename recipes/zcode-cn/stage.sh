@@ -35,12 +35,18 @@ recipe_stage() {
       "$ROOT$prefix/resources/apparmor-profile" 2>/dev/null || true
   fi
 
-  # Icons from upstream (16..1024).
-  for size in 16 24 32 48 64 128 256 512 1024; do
-    local ic="$unpack/usr/share/icons/hicolor/${size}x${size}/apps/zcode.png"
-    [[ -f "$ic" ]] && install -Dm644 "$ic" \
-      "$ROOT/usr/share/icons/hicolor/${size}x${size}/apps/$appname.png"
+  # Icons from upstream, badged per edition: both builds ship the same art.
+  local src_icon=""
+  for cand in "$unpack/usr/share/icons/hicolor/1024x1024/apps/zcode.png" \
+              "$unpack/usr/share/icons/hicolor/512x512/apps/zcode.png"; do
+    [[ -f "$cand" ]] && { src_icon="$cand"; break; }
   done
+  [[ -n "$src_icon" ]] || die "no upstream zcode icon"
+  if (( cn )); then
+    install_icon_badged_set "$src_icon" "$appname" CN '#C8102E'
+  else
+    install_icon_badged_set "$src_icon" "$appname" INTL '#2C549E'
+  fi
 
   # Desktop entry.
   install -m644 "$unpack/usr/share/applications/zcode.desktop" \

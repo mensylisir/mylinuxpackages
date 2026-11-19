@@ -46,6 +46,7 @@ recipe_stage() {
   # Electron's default_app.asar is not needed; keep LICENSE files.
   rm -f "$edir/resources/default_app.asar"
   local electron_bin="$edir/electron"
+  [[ -x "$electron_bin" ]] || die "bundled electron missing: $electron_bin"
 
   # Install resourcesPath override preload.
   install -m644 "$MLP_ROOT/lib/patch/qoder-resources.cjs" \
@@ -94,7 +95,7 @@ export _APPDIR="/usr/lib/$libdir"
 export CHROME_DESKTOP="$desktop_id"
 export LD_LIBRARY_PATH="\${_APPDIR}/lib:\${LD_LIBRARY_PATH:-}"
 unset ELECTRON_RUN_AS_NODE
-exec "$electron_bin" --no-sandbox --require "\${_APPDIR}/$launcher.js" \
+exec "/usr/lib/${libdir}-electron/electron" --no-sandbox --require "\${_APPDIR}/$launcher.js" \
   --app "\${_APPDIR}/$runname" "\$@"
 EOF
   chmod 755 "$ROOT/usr/bin/$launcher"

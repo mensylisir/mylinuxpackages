@@ -37,7 +37,12 @@ recipe_stage() {
   else
     icon="$unpack/usr/share/icons/hicolor/1024x1024/apps/xiaomi-mimo-desktop-ai.png"
   fi
-  install_icon_set "$icon" "$iconname"
+  # One identical upstream PNG for both editions: badge it per edition.
+  if (( cn )); then
+    install_icon_badged_set "$icon" "$iconname" CN '#C8102E'
+  else
+    install_icon_badged_set "$icon" "$iconname" INTL '#2C549E'
+  fi
 
   # Desktop entry: keep upstream name (it is the app's declared app id), but
   # point Exec/Icon at our launcher/icons.
@@ -71,14 +76,24 @@ EOF
   # Detect the upstream main executable inside the app dir (name differs
   # between domestic and overseas builds).
   local mainbin=""
-  for cand in qianfan-desktop-app xiaomi-mimo-desktop "Xiaomi MiMo AI" mimo-desktop; do
+  for cand in xiaomi-mimo-desktop-ai xiaomi-mimo-desktop qianfan-desktop-app "Xiaomi MiMo AI" mimo-desktop; do
     [[ -x "$ROOT$prefix/$cand" ]] && { mainbin="$cand"; break; }
   done
   if [[ -z "$mainbin" ]]; then
-    mainbin="$(find "$ROOT$prefix" -maxdepth 1 -type f -executable -printf '%f\n' | head -1)"
+    # Biggest real executable: shared objects (libEGL.so, ...) and the
+    # chromium helpers are executable too, but never the app entry point.
+    mainbin="$(find "$ROOT$prefix" -maxdepth 1 -type f -executable \
+      ! -name '*.so' ! -name '*.so.*' ! -name 'chrome-sandbox' \
+      ! -name 'chrome_crashpad_handler' -printf '%s %f\n' 2>/dev/null \
+      | sort -rn | head -1 | cut -d' ' -f2-)"
   fi
   [[ -n "$mainbin" ]] || die "cannot find main executable in $prefix"
-  printf 'exec "\$BASE/%s" "\$@"\n' "$mainbin" >> "$ROOT/usr/bin/$launcher"
+  case "$mainbin" in
+    *.so|*.so.*|chrome-sandbox|chrome_crashpad_handler)
+      die "main executable looks wrong: $mainbin" ;;
+  esac
+  [[ -n "$mainbin" ]] || die "cannot find main executable in $prefix"
+  printf 'exec "$BASE/%s" "$@"\n' "$mainbin" >> "$ROOT/usr/bin/$launcher"
   chmod 755 "$ROOT/usr/bin/$launcher"
 
   # Licenses + changelog.

@@ -40,18 +40,27 @@ deb_extract() {
 }
 
 # Extract an rpm's payload into a directory without rpm2cpio when possible.
-# Prefers rpm2cpio if present, else uses 7z (which reads cpio.gz payloads).
+# rpm2cpio+cpio is preferred; otherwise 7z first unwraps the rpm to its payload
+# cpio and then unpacks that (7z on an .rpm alone only yields the .cpio).
 # Usage: rpm_extract <rpm> <dest>
 rpm_extract() {
-  local rpm="$1" dest="$2"
+  local rpm="$1" dest="$2" tmp cpiofile
   mkdir -p "$dest"
-  if command -v rpm2cpio >/dev/null 2>&1; then
+  if command -v rpm2cpio >/dev/null 2>&1 && command -v cpio >/dev/null 2>&1; then
     rpm2cpio "$rpm" | ( cd "$dest" && cpio -idm --quiet ) 2>/dev/null || \
       die "rpm2cpio failed: $rpm"
-  else
-    # GNU cpio may be absent; 7z can list/extract rpm payloads.
-    7z x -y -o"$dest" "$rpm" >/dev/null 2>&1 || die "cannot extract rpm: $rpm"
+    return 0
   fi
+  tmp="$(mktemp -d -p "${CACHE_DIR:-/tmp}")"
+  7z x -y -o"$tmp" "$rpm" >/dev/null 2>&1 || { clean_dir "$tmp"; die "cannot extract rpm: $rpm"; }
+  cpiofile="$(find "$tmp" -maxdepth 1 -name '*.cpio' -print -quit)"
+  if [[ -n "$cpiofile" ]]; then
+    7z x -y -o"$dest" "$cpiofile" >/dev/null 2>&1 || { clean_dir "$tmp"; die "cannot extract rpm payload: $rpm"; }
+  else
+    # Already a plain tree (e.g. 7z handled it directly).
+    copy_tree "$tmp" "$dest"
+  fi
+  clean_dir "$tmp"
 }
 
 # Extract any tarball into a directory (auto-detect compression).
@@ -129,6 +138,49 @@ fix_desktop_entry() {
                 }
     { print }
   ' "$d" > "$tmp" && mv "$tmp" "$d"
+}
+
+# --- Edition badges --------------------------------------------------------
+# Upstream ships one identical icon for both the domestic and the overseas
+# build of some apps, so the launcher cannot tell them apart. Mirrors the
+# myaur convention: a circular badge (white ring + disc + label) in the
+# bottom-right corner, 30% of the icon diameter, default CN crimson C8102E,
+# INTL navy 2C549E.
+# Usage: badge_icon <src-png> <dst-png> <size> [label] [bg]
+badge_icon() {
+  local src="$1" dst="$2" size="$3" label="${4:-CN}" bg="${5:-#C8102E}"
+  [[ -f "$src" ]] || die "icon not found: $src"
+  local tool; tool="$(command -v magick || command -v convert)" || \
+    die "ImageMagick required for edition badges"
+  local bw pad ring pointsize tmp font
+  bw=$(( size * 30 / 100 )); (( bw < 7 )) && bw=7
+  pad=$(( size * 5 / 100 ));  (( pad < 1 )) && pad=1
+  ring=$(( bw / 12 ));        (( ring < 1 )) && ring=1
+  pointsize=$(( bw * 45 / 100 )); (( ${#label} >= 4 )) && pointsize=$(( bw * 27 / 100 ))
+  (( pointsize < 4 )) && pointsize=4
+  font="DejaVu-Sans-Bold"
+  "$tool" -list font 2>/dev/null | grep -q "Font: $font" || font="$( \
+    "$tool" -list font 2>/dev/null | sed -n 's/^ *Font: //p' | head -1)"
+  tmp="$(mktemp -d)"
+  "$tool" -size "${bw}x${bw}" xc:none \
+      -fill white -draw "circle $(( bw / 2 )),$(( bw / 2 )) $(( bw / 2 )),0" \
+      -fill "$bg" -draw "circle $(( bw / 2 )),$(( bw / 2 )) $(( bw / 2 )),${ring}" \
+      ${font:+-font "$font"} -gravity center -pointsize "$pointsize" \
+      -fill white -annotate +0+0 "$label" "$tmp/badge.png"
+  install -d "$(dirname "$dst")"
+  "$tool" "$src" -resize "${size}x${size}" "$tmp/badge.png" \
+      -gravity southeast -geometry "+${pad}+${pad}" -composite "$dst"
+  clean_dir "$tmp"
+}
+
+# Badge every hicolor size of an icon. Usage:
+#   install_icon_badged_set <src-png> <dest-name> [label] [bg]
+install_icon_badged_set() {
+  local src="$1" name="$2" label="${3:-CN}" bg="${4:-#2C549E}" size
+  for size in 16 24 32 48 64 96 128 256 512; do
+    badge_icon "$src" "$ROOT/usr/share/icons/hicolor/${size}x${size}/apps/${name}.png" \
+      "$size" "$label" "$bg"
+  done
 }
 
 # Usage: install_icon_set <src-png> <dest-name>
