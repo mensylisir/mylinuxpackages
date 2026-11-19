@@ -172,8 +172,9 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
+          # imagemagick: edition badges (CN/INTL) are drawn at build time.
           sudo apt-get install -y p7zip-full unzip rpm file xz-utils \
-            build-essential python3 curl
+            build-essential python3 curl imagemagick
           npm install -g @electron/asar node-gyp
 
       # claudemom builds a Tauri 2 app from source (upstream ships only

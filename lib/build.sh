@@ -245,11 +245,17 @@ validate_stage_output() {
   # 3. Another recipe's payload grafted into this one. Happens when two builds
   #    share a staging tree: the tree is cleaned by one build while the other is
   #    still copying into it, so a second /opt/<app> tree lands inside the app
-  #    dir. Cheap to spot, impossible to spot after install.
-  local nested="$WORK/.nested-payload"
-  find "$ROOT/opt" "$ROOT/usr/lib" -mindepth 2 -type d \
-       \( -path "$ROOT/opt/*/opt" -o -path "$ROOT/opt/*/usr/lib" \
-          -o -path "$ROOT/usr/lib/*/opt" \) -print 2>/dev/null > "$nested" || true
+  #    dir. Keep this to depth one on purpose - apps legitimately ship nested
+  #    FHS-looking trees deep inside (kimi-work bundles a git runtime under
+  #    .../runtime/git/usr/lib), and a glob based check flags those.
+  local nested="$WORK/.nested-payload" appdir sub
+  : > "$nested"
+  for appdir in "$ROOT"/opt/*/; do
+    [[ -d "$appdir" ]] || continue
+    for sub in opt usr; do
+      [[ -d "$appdir$sub" ]] && printf '%s\n' "${appdir}${sub}" >> "$nested"
+    done
+  done
   if [[ -s "$nested" ]]; then
     die "foreign payload nested inside this package: $(head -1 "$nested")"
   fi
