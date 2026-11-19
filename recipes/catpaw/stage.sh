@@ -39,7 +39,10 @@ recipe_stage() {
   mkdir -p "$W/win"
   "$inno" -d "$W/win" "$exe" >/dev/null || die "innoextract failed"
   local resdir
-  mapfile -t dirs < <(find "$W/win" -type f -name app.asar -printf '%h\n')
+  # Temp list instead of <( ... ): /dev/fd is not available in every
+  # build sandbox.
+  find "$W/win" -type f -name app.asar -printf '%h\n' > "$WORK/app-asar-dirs"
+  mapfile -t dirs < "$WORK/app-asar-dirs"
   [[ ${#dirs[@]} -eq 1 ]] || die "expected exactly one app.asar, got ${#dirs[@]}"
   resdir="${dirs[0]}"
 
@@ -59,7 +62,7 @@ recipe_stage() {
   # --- 4. Payload ----------------------------------------------------------
   info "copying application payload"
   cp "$resdir/app.asar" "$out/resources/app.asar"
-  cp -a "$resdir/app.asar.unpacked" "$out/resources/app.asar.unpacked"
+  cp -a --no-preserve=timestamps "$resdir/app.asar.unpacked" "$out/resources/app.asar.unpacked"
   mkdir -p "$out/resources/app"
   if [[ -f "$resdir/app/product.json" ]]; then cp "$resdir/app/product.json" "$out/resources/app/product.json"
   elif [[ -f "$resdir/product.json" ]]; then
@@ -67,7 +70,7 @@ recipe_stage() {
     cp "$resdir/product.json" "$out/resources/product.json"; fi
   local d
   for d in cli cli-apps app-extensions skills wasm; do
-    [[ -d "$resdir/$d" ]] && cp -a "$resdir/$d" "$out/resources/$d"; done
+    [[ -d "$resdir/$d" ]] && cp -a --no-preserve=timestamps "$resdir/$d" "$out/resources/$d"; done
   [[ -d "$out/resources/cli" && -f "$out/resources/cli/catpaw-cli.js" ]] || die "cli payload missing"
   for f in icon.png tray-iconTemplate.png tray-iconTemplate@2x.png; do
     [[ -f "$resdir/$f" ]] && cp "$resdir/$f" "$out/resources/$f"; done

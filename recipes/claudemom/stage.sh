@@ -24,7 +24,14 @@ recipe_stage() {
   ( cd "$tree/apps/claude-mom" && npm run vite:build )
 
   say "[claudemom] compiling Tauri binary (cargo, release)"
-  ( cd "$tree" && CARGO_TARGET_DIR="$WORK/cargo-target" cargo build --release --bin claude-mom )
+  # Rust bakes source paths into panic messages and debug info, so a plain
+  # release build leaks the builder's home directory into the shipped binary
+  # (521 hits of /home/<builder> in the first build). Remap them to neutral
+  # paths and strip symbols: the app has no use for either.
+  ( cd "$tree" && CARGO_TARGET_DIR="$WORK/cargo-target" \
+      CARGO_PROFILE_RELEASE_STRIP=symbols \
+      RUSTFLAGS="--remap-path-prefix=$tree=/usr/src/claudemom --remap-path-prefix=${HOME:-/root}=/build" \
+      cargo build --release --bin claude-mom )
 
   say "[claudemom] laying out package root"
   mkdir -p "$ROOT/usr/lib/claudemom" "$ROOT/usr/bin" \

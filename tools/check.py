@@ -149,6 +149,30 @@ def check_stage_escapes() -> None:
                 err(f"{rid}: stage.sh:{i}: \\$ inside single quotes never expands: {line.strip()[:90]}")
 
 
+def check_sandbox_portability() -> None:
+    """No /dev/fd, /dev/stdin or <( ... ) in recipes.
+
+    Those work on GitHub runners but not in every build sandbox: process
+    substitution dies with "/dev/fd/63: 没有那个文件或目录" and
+    `install /dev/stdin` with "cannot stat". Both bit us; use temp files.
+    """
+    patterns = (
+        (r"/dev/fd", "/dev/fd"),
+        (r"/dev/stdin", "/dev/stdin"),
+        (r"/dev/stdout", "/dev/stdout"),
+        (r"[<>]\s*<\(", "process substitution"),
+    )
+    for stage in sorted(glob.glob(os.path.join(ROOT, "recipes/*/stage.sh"))
+                        + glob.glob(os.path.join(ROOT, "lib/*.sh"))):
+        rid = os.path.basename(os.path.dirname(stage))
+        for i, line in enumerate(open(stage, encoding="utf-8"), 1):
+            code = line.split("#", 1)[0]
+            for pat, label in patterns:
+                if re.search(pat, code):
+                    err(f"{rid}/{os.path.basename(stage)}:{i}: "
+                        f"{label} is not portable, use a temp file: {line.strip()[:80]}")
+
+
 # --- 4. writes into directories nobody creates -------------------------------
 WRITE_PATTERNS = [
     re.compile(r'(?:^|&&|\|\||;|\bthen\b)\s*install\s+-(?!D|d)[0-9a-zA-Z]*\s+.*?"(\$(?:\{ROOT\}|ROOT)[^"]*)"'),
@@ -215,6 +239,7 @@ def main() -> int:
     check_syntax()
     check_recipes()
     check_stage_escapes()
+    check_sandbox_portability()
     check_stage_dirs()
 
     for w in warnings:

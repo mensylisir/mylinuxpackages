@@ -220,11 +220,11 @@ validate_stage_output() {
   while IFS= read -r -d '' f; do
     # grep -I skips binaries; only text payloads can carry these bugs.
     if grep -IqE '/home/runner/|/\.build/|\$ROOT|\$WORK' "$f" 2>/dev/null; then
-      die "build path leaked into shipped file: $f"
+      die "build path leaked into shipped file: ${f#"$ROOT"}"
     fi
     if [[ "$(head -c 2 "$f" 2>/dev/null)" == '#!' ]] \
        && grep -qE '^[[:space:]]*(exec|eval)[[:space:]].*\\\$' "$f" 2>/dev/null; then
-      die "shipped launcher keeps unexpandable \\\$ escapes: $f"
+      die "shipped launcher keeps unexpandable \\\$ escapes: ${f#"$ROOT"}"
     fi
     # Launchers must never exec a shared object or a chromium helper: a bad
     # "first executable found" fallback did exactly that and the package
@@ -236,28 +236,49 @@ validate_stage_output() {
       while IFS= read -r tgt; do
         case "$tgt" in
           *.so|*.so.*|*/chrome-sandbox|*/chrome_crashpad_handler)
-            die "launcher execs a non-app binary ($tgt): $f" ;;
+            die "launcher execs a non-app binary ($tgt): ${f#"$ROOT"}" ;;
         esac
       done < "$tgts"
     fi
   done < "$list"
 
+  # 2b. Full-payload sweep for *our* build host paths, binaries included. The
+  #     first released qoder packages carried /home/runner/work/mylinuxpackages/
+  #     ... inside a launcher, and a Rust release build bakes the builder's home
+  #     directory into panic strings (521 hits in the first claudemom build).
+  #     Upstream apps legitimately embed their own CI paths (/home/runner/work/
+  #     vscode, zeromq, ...), so only paths pointing into this build are matched.
+  local leaks="$WORK/.path-leaks" re
+  re="$(printf '%s\n' "$ROOT" "$WORK" "/home/runner/work/mylinuxpackages" \
+        | sed 's/[][\\.*^$]/\\&/g' | paste -sd'|' -)"
+  # A local builder's $HOME leaks through cargo panic paths too; skip it when it
+  # is the runner's own home, which upstream sources mention constantly.
+  if [[ -n "${HOME:-}" && "$HOME" != "/home/runner" ]]; then
+    re="$re|$(printf '%s' "$HOME/" | sed 's/[][\\.*^$]/\\&/g')"
+  fi
+  grep -rlaE -- "$re" "$ROOT" > "$leaks" 2>/dev/null || true
+  if [[ -s "$leaks" ]]; then
+    die "build host path leaked into $(wc -l < "$leaks") shipped file(s): $(head -1 "$leaks" | sed "s|^$ROOT||")"
+  fi
+
   # 3. Another recipe's payload grafted into this one. Happens when two builds
   #    share a staging tree: the tree is cleaned by one build while the other is
   #    still copying into it, so a second /opt/<app> tree lands inside the app
-  #    dir. Keep this to depth one on purpose - apps legitimately ship nested
-  #    FHS-looking trees deep inside (kimi-work bundles a git runtime under
-  #    .../runtime/git/usr/lib), and a glob based check flags those.
-  local nested="$WORK/.nested-payload" appdir sub
+  #    dir (trae-cn shipped /opt/trae-cn/opt/Xiaomi once).
+  #
+  #    Only a nested *opt* counts. Plenty of bundles legitimately ship usr/
+  #    under their own prefix (kimi-code has /opt/kimi-code-cn/usr, kimi-work
+  #    has .../runtime/git/usr/lib), so anything broader flags healthy packages.
+  local nested="$WORK/.nested-payload" appdir
   : > "$nested"
   for appdir in "$ROOT"/opt/*/; do
     [[ -d "$appdir" ]] || continue
-    for sub in opt usr; do
-      [[ -d "$appdir$sub" ]] && printf '%s\n' "${appdir}${sub}" >> "$nested"
-    done
+    if [[ -d "${appdir}opt" ]]; then
+      printf '%s\n' "${appdir}opt" >> "$nested"
+    fi
   done
   if [[ -s "$nested" ]]; then
-    die "foreign payload nested inside this package: $(head -1 "$nested")"
+    die "foreign payload nested inside this package: $(head -1 "$nested" | sed "s|^$ROOT||")"
   fi
 }
 validate_stage_output

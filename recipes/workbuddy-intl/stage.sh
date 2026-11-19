@@ -56,13 +56,13 @@ recipe_stage() {
   local e
   for e in "$host"/*; do
     [[ "$(basename "$e")" == resources ]] && continue
-    cp -a "$e" "$app/"
+    cp -a --no-preserve=timestamps "$e" "$app/"
   done
   chmod 4755 "$app/chrome-sandbox" 2>/dev/null || true
   local hr="$host/resources" res="$app/resources"
-  cp -a "$hr/runtime" "$res/runtime"
+  cp -a --no-preserve=timestamps "$hr/runtime" "$res/runtime"
   for asset in tray-linux.png tray-linux@2x.png apparmor-profile wb-guest-sdk; do
-    [[ -e "$hr/$asset" ]] && cp -a "$hr/$asset" "$res/$asset"
+    [[ -e "$hr/$asset" ]] && cp -a --no-preserve=timestamps "$hr/$asset" "$res/$asset"
   done
 
   # --- 3. Windows JS payload -----------------------------------------------
@@ -76,7 +76,7 @@ recipe_stage() {
   unzip -q "$winzip" -d "$W/win" 'resources/conversation-report.html' \
     'resources/startup-report.html' 2>/dev/null || true
   for page in conversation-report.html startup-report.html; do
-    [[ -f "$W/win/resources/$page" ]] && cp -a "$W/win/resources/$page" "$res/"
+    [[ -f "$W/win/resources/$page" ]] && cp -a --no-preserve=timestamps "$W/win/resources/$page" "$res/"
   done
 
   # --- 4. Linux native modules from donor ----------------------------------
@@ -86,27 +86,27 @@ recipe_stage() {
     [[ -d "$base/node_modules/koffi" ]] || continue
     require_same "$base/node_modules/koffi" "$stock/node_modules/koffi" koffi
     mkdir -p "$base/node_modules/koffi/build/koffi/$koffi_platform"
-    cp -a "$stock/node_modules/koffi/build/koffi/$koffi_platform/." \
+    cp -a --no-preserve=timestamps "$stock/node_modules/koffi/build/koffi/$koffi_platform/." \
       "$base/node_modules/koffi/build/koffi/$koffi_platform/"
   done
   if [[ -d "$payload/node_modules/node-pty" ]]; then
     require_same "$payload/node_modules/node-pty" "$stock/node_modules/node-pty" node-pty
     clean_dir "$payload/node_modules/node-pty/build"
-    cp -a "$stock/node_modules/node-pty/build" "$payload/node_modules/node-pty/build"
+    cp -a --no-preserve=timestamps "$stock/node_modules/node-pty/build" "$payload/node_modules/node-pty/build"
   fi
   if [[ -d "$payload/node_modules/@tencent/qimei-node" ]]; then
     require_same "$payload/node_modules/@tencent/qimei-node" "$stock/node_modules/@tencent/qimei-node" qimei-node
     clean_dir "$payload/node_modules/@tencent/qimei-node/build"
-    cp -a "$stock/node_modules/@tencent/qimei-node/build" "$payload/node_modules/@tencent/qimei-node/build"
+    cp -a --no-preserve=timestamps "$stock/node_modules/@tencent/qimei-node/build" "$payload/node_modules/@tencent/qimei-node/build"
   fi
   if [[ -d "$payload/node_modules/@tencent/tencent-docs-ai-engine" ]]; then
     local dd="$stock/node_modules/@tencent/tencent-docs-ai-engine/bin/linux-${machine}"
-    [[ -d "$dd" ]] && cp -a "$dd" "$payload/node_modules/@tencent/tencent-docs-ai-engine/bin/"
+    [[ -d "$dd" ]] && cp -a --no-preserve=timestamps "$dd" "$payload/node_modules/@tencent/tencent-docs-ai-engine/bin/"
   fi
   if [[ -d "$payload/node_modules/@lydell/node-pty-linux-${machine}" ]] \
      && [[ -d "$payload/cli/node_modules/@lydell/node-pty" ]] \
      && [[ ! -d "$payload/cli/node_modules/@lydell/node-pty-linux-${machine}" ]]; then
-    cp -a "$payload/node_modules/@lydell/node-pty-linux-${machine}" "$payload/cli/node_modules/@lydell/"
+    cp -a --no-preserve=timestamps "$payload/node_modules/@lydell/node-pty-linux-${machine}" "$payload/cli/node_modules/@lydell/"
   fi
 
   # --- 5. Linux CLI helpers ------------------------------------------------
@@ -116,25 +116,25 @@ recipe_stage() {
   local sv; sv="$(pkg_version "$W/sandbox/package")"
   [[ "$sv" == "$EXPECTED_SANDBOX" ]] || die "sandbox-cli drift: $sv"
   mkdir -p "$payload/cli/vendor/sandbox/$sv"
-  cp -a "$W/sandbox/package/bin/." "$payload/cli/vendor/sandbox/$sv/"
+  cp -a --no-preserve=timestamps "$W/sandbox/package/bin/." "$payload/cli/vendor/sandbox/$sv/"
   find "$payload/cli/vendor/sandbox/$sv" -type f -exec chmod 755 {} +
   # Restore executable bits on shebang scripts (Windows zip drops them).
   grep -rlI -m1 '^#!' "$payload" 2>/dev/null | while IFS= read -r f; do chmod 755 "$f"; done || true
   clean_dir "$payload/cli/vendor/genie-trash"
   mkdir -p "$payload/cli/vendor/genie-trash"
-  cp -a "$stock/cli/vendor/genie-trash/linux-${machine}" \
+  cp -a --no-preserve=timestamps "$stock/cli/vendor/genie-trash/linux-${machine}" \
     "$payload/cli/vendor/genie-trash/linux-${machine}"
   chmod 755 "$payload/cli/vendor/genie-trash/linux-${machine}"
   if [[ -d "$stock/cli/vendor/ripgrep/${machine}-linux" ]]; then
     clean_dir "$payload/cli/vendor/ripgrep"; mkdir -p "$payload/cli/vendor/ripgrep"
-    cp -a "$stock/cli/vendor/ripgrep/${machine}-linux" "$payload/cli/vendor/ripgrep/${machine}-linux"
+    cp -a --no-preserve=timestamps "$stock/cli/vendor/ripgrep/${machine}-linux" "$payload/cli/vendor/ripgrep/${machine}-linux"
     find "$payload/cli/vendor/ripgrep" -type f -exec chmod 755 {} +
   fi
   mkdir -p "$W/harness"; tar -xzf "$harness_tgz" -C "$W/harness" --no-same-owner --touch
   local hv; hv="$(pkg_version "$W/harness/package")"
   [[ "$hv" == "$EXPECTED_HARNESS" ]] || die "agent-harness drift: $hv"
   mkdir -p "$payload/node_modules/@tencent-ai"
-  cp -a "$W/harness/package" "$payload/node_modules/@tencent-ai/agent-harness-linux-${machine}"
+  cp -a --no-preserve=timestamps "$W/harness/package" "$payload/node_modules/@tencent-ai/agent-harness-linux-${machine}"
   find "$payload/node_modules/@tencent-ai/agent-harness-linux-${machine}/bin" -type f -exec chmod 755 {} +
 
   # --- 6. Drop foreign-platform artifacts ----------------------------------
@@ -145,13 +145,15 @@ recipe_stage() {
     -o -name 'macos-*' -o -name '*-macos' \) -exec clean_dir {} + 2>/dev/null || true
   find "$app" -type f \( -name '*.exe' -o -name '*.dll' -o -name '*.sys' -o -name '*.dylib' \
     -o -name '*.pdb' -o -name '*.lib' \) -delete 2>/dev/null || true
+  # Temp list instead of <( ... ): /dev/fd is not available in every sandbox.
+  find "$app" -type f -name '*.node' -print0 > "$WORK/native-modules.list"
   while IFS= read -r -d '' b; do
     local desc; desc="$(file -b "$b")"
     case "$desc" in
       ELF*) [[ "$desc" == *'x86-64'* ]] || rm -f "$b" ;;
       *) rm -f "$b" ;;
     esac
-  done < <(find "$app" -type f -name '*.node' -print0)
+  done < "$WORK/native-modules.list"
   prune_keep() { local p="$1"; shift; [[ -d "$p" ]] || return 0
     local c n k; for c in "$p"/*; do [[ -e "$c" ]] || continue; n="$(basename "$c")"
       local keep=0; for k in "$@"; do [[ "$n" == "$k" ]] && keep=1; done

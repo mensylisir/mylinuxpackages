@@ -58,16 +58,23 @@ recipe_stage() {
 
   # Offline wrappers for the Windows-only launchers: run the bundled Node
   # (Electron in Node mode) instead of downloading Node at runtime.
-  install -Dm755 /dev/stdin "$daimon/bin/daimon" <<'DAIMON'
+  # Write the wrappers to real files first: `install ... /dev/stdin` depends on
+  # /dev/stdin existing in the build sandbox, which is not guaranteed (it fails
+  # there with "cannot stat '/dev/stdin'").
+  local wrapdir="$WORK/wrappers"
+  mkdir -p "$wrapdir"
+  cat > "$wrapdir/daimon" <<'DAIMON'
 #!/bin/sh
 set -eu
 DIR=$(cd "$(dirname "$0")" && pwd)
 exec "${DIR}/../runtime/node" "${DIR}/../app/daimon/dist/src/runner/cli.js" "$@"
 DAIMON
-  install -Dm755 /dev/stdin "$daimon/runtime/node" <<'NODE'
+  install -Dm755 "$wrapdir/daimon" "$daimon/bin/daimon"
+  cat > "$wrapdir/node" <<'NODE'
 #!/bin/sh
 exec env ELECTRON_RUN_AS_NODE=1 "$KIMI_ELECTRON" "$@"
 NODE
+  install -Dm755 "$wrapdir/node" "$daimon/runtime/node"
 
   # Disable the launcher global shortcut in all three variants so Wayland does
   # not show the XDG GlobalShortcuts "Add keyboard" prompt on first launch.
