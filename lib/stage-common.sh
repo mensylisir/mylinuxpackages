@@ -140,6 +140,38 @@ fix_desktop_entry() {
   ' "$d" > "$tmp" && mv "$tmp" "$d"
 }
 
+# Same rewrite as fix_desktop_entry, but keeps the rest of the upstream command
+# line instead of collapsing Exec to "<exe> %U".
+#
+# Apps whose vendor binary takes its own switches (Qoder: --open-file, --open-url,
+# --new-window) lose those switches otherwise, so file/protocol associations
+# silently stop working. Only the leading absolute binary path is replaced.
+# Usage: fix_desktop_entry_keep_args <desktop-file> <exec-name>
+fix_desktop_entry_keep_args() {
+  local d="$1" exe="$2" tmp
+  [[ -f "$d" ]] || return 0
+  tmp="$d.mlp-tmp"
+  awk -v exe="$exe" '
+    /^Exec=/    {
+                  line = $0; sub(/^Exec=/, "", line)
+                  # Drop the upstream absolute path; everything after it (flags,
+                  # field codes) is the vendor command line we must keep.
+                  sub(/^\/[^[:space:]]+[[:space:]]*/, "", line)
+                  print "Exec=" exe (line == "" ? " %U" : " " line); next
+                }
+    /^TryExec=/ { print "TryExec=" exe; next }
+    /^Icon=/    {
+                  v = $0; sub(/^Icon=/, "", v)
+                  if (v ~ /\//) {
+                    n = split(v, a, "/"); v = a[n]
+                    sub(/\.(png|svg|xpm)$/, "", v)
+                  }
+                  print "Icon=" v; next
+                }
+    { print }
+  ' "$d" > "$tmp" && mv "$tmp" "$d"
+}
+
 # --- Edition badges --------------------------------------------------------
 # Upstream ships one identical icon for both the domestic and the overseas
 # build of some apps, so the launcher cannot tell them apart. Mirrors the
